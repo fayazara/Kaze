@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import AVFoundation
+import CoreAudio
 
 // MARK: - Settings Tab Enum
 
@@ -102,10 +104,13 @@ private struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.enhancementSystemPrompt) private var systemPrompt = AppPreferenceKey.defaultEnhancementPrompt
     @AppStorage(AppPreferenceKey.hotkeyMode) private var hotkeyModeRaw = HotkeyMode.holdToTalk.rawValue
     @AppStorage(AppPreferenceKey.notchMode) private var notchMode = false
+    @AppStorage(AppPreferenceKey.selectedMicrophoneID) private var selectedMicrophoneID = ""
+    @AppStorage(AppPreferenceKey.appendTrailingSpace) private var appendTrailingSpace = false
     @State private var hotkeyShortcut = HotkeyShortcut.loadFromDefaults()
     @State private var isRecordingHotkey = false
     @State private var hotkeyMonitor: Any?
     @State private var recordedModifiersUnion: HotkeyShortcut.Modifiers = []
+    @State private var availableMicrophones: [(id: String, name: String)] = []
 
     @ObservedObject var whisperModelManager: WhisperModelManager
     @ObservedObject var parakeetModelManager: FluidAudioModelManager
@@ -173,6 +178,19 @@ private struct GeneralSettingsView: View {
                             fluidAudioModelStatusRow(manager: qwenModelManager, model: .qwen)
                         }
                     }
+                }
+
+                sectionDivider()
+
+                // MARK: Microphone
+                formRow("Microphone:") {
+                    Picker("Microphone", selection: $selectedMicrophoneID) {
+                        Text("System Default").tag("")
+                        ForEach(availableMicrophones, id: \.id) { mic in
+                            Text(mic.name).tag(mic.id)
+                        }
+                    }
+                    .labelsHidden()
                 }
 
                 sectionDivider()
@@ -294,6 +312,17 @@ private struct GeneralSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                sectionDivider()
+
+                // MARK: Output
+                formRow("Trailing space:") {
+                    Toggle(isOn: $appendTrailingSpace) {
+                        Text("Append a space after each transcription")
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+
                 Spacer(minLength: 20)
             }
             .padding(.top, 12)
@@ -303,7 +332,69 @@ private struct GeneralSettingsView: View {
         }
         .onAppear {
             hotkeyShortcut = HotkeyShortcut.loadFromDefaults()
+            availableMicrophones = Self.listInputDevices()
         }
+    }
+
+    // MARK: - Audio Device Enumeration
+
+    private static func listInputDevices() -> [(id: String, name: String)] {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var dataSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress, 0, nil, &dataSize
+        ) == noErr else { return [] }
+
+        let deviceCount = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress, 0, nil, &dataSize, &deviceIDs
+        ) == noErr else { return [] }
+
+        var result: [(id: String, name: String)] = []
+
+        for deviceID in deviceIDs {
+            // Check if device has input channels
+            var inputAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreamConfiguration,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            var inputSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(deviceID, &inputAddress, 0, nil, &inputSize) == noErr,
+                  inputSize > 0 else { continue }
+
+            let bufferListPtr = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+            defer { bufferListPtr.deallocate() }
+            guard AudioObjectGetPropertyData(deviceID, &inputAddress, 0, nil, &inputSize, bufferListPtr) == noErr else { continue }
+
+            let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPtr)
+            let inputChannels = bufferList.reduce(0) { $0 + Int($1.mNumberChannels) }
+            guard inputChannels > 0 else { continue }
+
+            // Get device name
+            var nameAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceNameCFString,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            var name: CFString = "" as CFString
+            var nameSize = UInt32(MemoryLayout<CFString>.size)
+            guard AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name) == noErr else { continue }
+
+            result.append((id: String(deviceID), name: name as String))
+        }
+
+        return result
     }
 
     // MARK: - Whisper Model Status

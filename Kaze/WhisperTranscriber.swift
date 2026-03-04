@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CoreAudio
 import Accelerate
 import Combine
 import WhisperKit
@@ -240,6 +241,7 @@ class WhisperTranscriber: ObservableObject, TranscriberProtocol {
     @Published var isEnhancing = false
 
     var onTranscriptionFinished: ((String) -> Void)?
+    var selectedDeviceID: AudioDeviceID?
 
     /// Custom words to bias recognition toward (names, abbreviations, etc.)
     var customWords: [String] = []
@@ -319,6 +321,7 @@ class WhisperTranscriber: ObservableObject, TranscriberProtocol {
                 }
             }
 
+            applyInputDevice(selectedDeviceID, to: audioEngine)
             audioEngine.prepare()
             try audioEngine.start()
             isRecording = true

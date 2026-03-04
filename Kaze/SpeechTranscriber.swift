@@ -1,6 +1,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import CoreAudio
 import Combine
 
 @MainActor
@@ -19,6 +20,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
     private var hasDeliveredFinalResult = false
 
     var onTranscriptionFinished: ((String) -> Void)?
+    var selectedDeviceID: AudioDeviceID?
 
     /// Custom words to hint the recognizer toward (names, abbreviations, etc.)
     var customWords: [String] = []
@@ -149,6 +151,7 @@ class SpeechTranscriber: ObservableObject, TranscriberProtocol {
             }
         }
 
+        applyInputDevice(selectedDeviceID, to: audioEngine)
         audioEngine.prepare()
         try audioEngine.start()
 

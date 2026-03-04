@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreAudio
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {
     case dictation
@@ -80,6 +81,8 @@ enum AppPreferenceKey {
     static let whisperModelVariant = "whisperModelVariant"
     static let fluidAudioModelState = "fluidAudioModelState"
     static let notchMode = "notchMode"
+    static let selectedMicrophoneID = "selectedMicrophoneID"
+    static let appendTrailingSpace = "appendTrailingSpace"
 
     static let defaultEnhancementPrompt = """
         You are Kaze, a speech-to-text transcription assistant. Your only job is to \
@@ -161,6 +164,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var notchModeEnabled: Bool {
         UserDefaults.standard.bool(forKey: AppPreferenceKey.notchMode)
+    }
+
+    /// Returns the Core Audio device ID for the user-selected microphone, or nil for system default.
+    private var selectedMicrophoneDeviceID: AudioDeviceID? {
+        let stored = UserDefaults.standard.string(forKey: AppPreferenceKey.selectedMicrophoneID) ?? ""
+        guard !stored.isEmpty, let id = UInt32(stored) else { return nil }
+        return id
     }
 
     private var hotkeyModeObserver: NSObjectProtocol?
@@ -329,14 +339,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         isSessionActive = true
 
-        // Pass current custom words to the transcriber
+        // Pass current custom words and selected microphone to the transcriber
         let words = customWordsManager.words
+        let micID = selectedMicrophoneDeviceID
 
         // Use the appropriate transcriber
         if engine == .whisper, isEngineReady(.whisper) {
             let whisper = whisperTranscriber ?? WhisperTranscriber(modelManager: whisperModelManager)
             whisperTranscriber = whisper
             whisper.customWords = words
+            whisper.selectedDeviceID = micID
             whisper.onTranscriptionFinished = { [weak self] (text: String) in
                 guard let self else { return }
                 self.processTranscription(text)
@@ -348,6 +360,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let manager = engine == .parakeet ? parakeetModelManager : qwenModelManager
             let model: FluidAudioModel = engine == .parakeet ? .parakeet : .qwen
             let transcriber = getOrCreateFluidAudioTranscriber(model: model, manager: manager)
+            transcriber.selectedDeviceID = micID
             transcriber.onTranscriptionFinished = { [weak self] (text: String) in
                 guard let self else { return }
                 self.processTranscription(text)
@@ -357,6 +370,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             transcriber.startRecording()
         } else {
             speechTranscriber.customWords = words
+            speechTranscriber.selectedDeviceID = micID
             speechTranscriber.onTranscriptionFinished = { [weak self] (text: String) in
                 guard let self else { return }
                 self.processTranscription(text)
@@ -495,11 +509,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func typeText(_ text: String) {
         guard !text.isEmpty else { return }
+        var output = text
+        if UserDefaults.standard.bool(forKey: AppPreferenceKey.appendTrailingSpace) {
+            output += " "
+        }
         let source = CGEventSource(stateID: .hidSystemState)
         let pasteboard = NSPasteboard.general
         let previous = pasteboard.string(forType: .string) ?? ""
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        pasteboard.setString(output, forType: .string)
 
         let vKeyCode: CGKeyCode = 0x09
         let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)

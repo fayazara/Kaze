@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CoreAudio
 import Combine
 import FluidAudio
 
@@ -264,6 +265,7 @@ class FluidAudioTranscriber: ObservableObject, TranscriberProtocol {
     @Published var isEnhancing = false
 
     var onTranscriptionFinished: ((String) -> Void)?
+    var selectedDeviceID: AudioDeviceID?
 
     let model: FluidAudioModel
     private let modelManager: FluidAudioModelManager
@@ -338,6 +340,7 @@ class FluidAudioTranscriber: ObservableObject, TranscriberProtocol {
                 }
             }
 
+            applyInputDevice(selectedDeviceID, to: audioEngine)
             audioEngine.prepare()
             try audioEngine.start()
             isRecording = true
