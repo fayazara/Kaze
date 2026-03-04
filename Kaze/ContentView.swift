@@ -103,7 +103,7 @@ private struct GeneralSettingsView: View {
     @AppStorage(AppPreferenceKey.enhancementMode) private var enhancementModeRaw = EnhancementMode.off.rawValue
     @AppStorage(AppPreferenceKey.enhancementSystemPrompt) private var systemPrompt = AppPreferenceKey.defaultEnhancementPrompt
     @AppStorage(AppPreferenceKey.hotkeyMode) private var hotkeyModeRaw = HotkeyMode.holdToTalk.rawValue
-    @AppStorage(AppPreferenceKey.notchMode) private var notchMode = false
+    @AppStorage(AppPreferenceKey.notchMode) private var notchMode = true
     @AppStorage(AppPreferenceKey.selectedMicrophoneID) private var selectedMicrophoneID = ""
     @AppStorage(AppPreferenceKey.appendTrailingSpace) private var appendTrailingSpace = false
     @State private var hotkeyShortcut = HotkeyShortcut.loadFromDefaults()
@@ -253,9 +253,16 @@ private struct GeneralSettingsView: View {
                             .tag(EnhancementMode.appleIntelligence.rawValue)
                     }
                     .labelsHidden()
+                    .disabled(selectedEngine != .dictation)
                 }
 
-                if !appleIntelligenceAvailable {
+                if selectedEngine != .dictation {
+                    formRow("") {
+                        Label("Text enhancement is only available with Direct Dictation. AI models already produce enhanced output.", systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !appleIntelligenceAvailable {
                     formRow("") {
                         Label("Apple Intelligence is not available on this Mac.", systemImage: "info.circle")
                             .font(.caption)
@@ -263,7 +270,7 @@ private struct GeneralSettingsView: View {
                     }
                 }
 
-                if enhancementModeRaw == EnhancementMode.appleIntelligence.rawValue {
+                if enhancementModeRaw == EnhancementMode.appleIntelligence.rawValue, selectedEngine == .dictation {
                     formRow("System prompt:") {
                         VStack(alignment: .leading, spacing: 6) {
                             TextEditor(text: $systemPrompt)

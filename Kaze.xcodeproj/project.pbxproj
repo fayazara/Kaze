@@ -12,6 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		31A60D402F58948200550E29 /* KazeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KazeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F19CCD2F4D76D200E96913 /* Kaze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kaze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -24,6 +25,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		31A60D3D2F58948200550E29 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		31F19CCA2F4D76D200E96913 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -48,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				31F19CCD2F4D76D200E96913 /* Kaze.app */,
+				31A60D402F58948200550E29 /* KazeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,6 +64,25 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		31A60D3F2F58948200550E29 /* KazeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 31A60D442F58948200550E29 /* Build configuration list for PBXNativeTarget "KazeTests" */;
+			buildPhases = (
+				31A60D3C2F58948200550E29 /* Sources */,
+				31A60D3D2F58948200550E29 /* Frameworks */,
+				31A60D3E2F58948200550E29 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KazeTests;
+			packageProductDependencies = (
+			);
+			productName = KazeTests;
+			productReference = 31A60D402F58948200550E29 /* KazeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		31F19CCC2F4D76D200E96913 /* Kaze */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 31F19CD82F4D76D300E96913 /* Build configuration list for PBXNativeTarget "Kaze" */;
@@ -86,9 +114,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					31A60D3F2F58948200550E29 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					31F19CCC2F4D76D200E96913 = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -113,11 +144,19 @@
 			projectRoot = "";
 			targets = (
 				31F19CCC2F4D76D200E96913 /* Kaze */,
+				31A60D3F2F58948200550E29 /* KazeTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		31A60D3E2F58948200550E29 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		31F19CCB2F4D76D200E96913 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +167,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		31A60D3C2F58948200550E29 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		31F19CC92F4D76D200E96913 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -138,6 +184,49 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		31A60D452F58948200550E29 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TB2S44TFQS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.KazeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		31A60D462F58948200550E29 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TB2S44TFQS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.KazeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		31F19CD62F4D76D300E96913 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -339,6 +428,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		31A60D442F58948200550E29 /* Build configuration list for PBXNativeTarget "KazeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				31A60D452F58948200550E29 /* Debug */,
+				31A60D462F58948200550E29 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		31F19CC82F4D76D200E96913 /* Build configuration list for PBXProject "Kaze" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

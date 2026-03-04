@@ -98,6 +98,7 @@ class WhisperModelManager: ObservableObject {
     }
 
     private var whisperKit: WhisperKit?
+    private var loadTask: Task<WhisperKit, any Error>?
 
     init() {
         let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.whisperModelVariant)
@@ -166,27 +167,42 @@ class WhisperModelManager: ObservableObject {
             return existing
         }
 
+        // If a load is already in-flight, await it instead of starting a duplicate.
+        if let existing = loadTask {
+            return try await existing.value
+        }
+
         state = .loading
 
         // Try stored path first
         let modelPath: String? = UserDefaults.standard.string(forKey: modelPathKey)
 
-        let config = WhisperKitConfig(
-            model: selectedVariant.whisperKitVariant,
-            downloadBase: modelDirectory,
-            modelFolder: modelPath,
-            verbose: false,
-            logLevel: .none,
-            prewarm: true,
-            load: true,
-            download: modelPath == nil
-        )
+        let task = Task<WhisperKit, any Error> {
+            let config = WhisperKitConfig(
+                model: selectedVariant.whisperKitVariant,
+                downloadBase: modelDirectory,
+                modelFolder: modelPath,
+                verbose: false,
+                logLevel: .none,
+                prewarm: true,
+                load: true,
+                download: modelPath == nil
+            )
+            return try await WhisperKit(config)
+        }
+        loadTask = task
 
-        let kit = try await WhisperKit(config)
-        whisperKit = kit
-        state = .ready
-        refreshModelSizeOnDisk()
-        return kit
+        do {
+            let kit = try await task.value
+            loadTask = nil
+            whisperKit = kit
+            state = .ready
+            refreshModelSizeOnDisk()
+            return kit
+        } catch {
+            loadTask = nil
+            throw error
+        }
     }
 
     /// Deletes the currently selected model's files.
@@ -200,9 +216,14 @@ class WhisperModelManager: ObservableObject {
 
     /// Releases the loaded Whisper runtime from memory while keeping files on disk.
     func unloadModelFromMemory() {
+        loadTask?.cancel()
+        loadTask = nil
         whisperKit = nil
-        if case .ready = state {
+        switch state {
+        case .ready, .loading:
             state = .downloaded
+        default:
+            break
         }
     }
 

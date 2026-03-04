@@ -80,6 +80,7 @@ class FluidAudioModelManager: ObservableObject {
     // Loaded runtime objects
     private var parakeetManager: AsrManager?
     private var qwen3Manager: Qwen3AsrManager?
+    private var loadTask: Task<Void, any Error>?
 
     init(model: FluidAudioModel) {
         self.model = model
@@ -151,25 +152,41 @@ class FluidAudioModelManager: ObservableObject {
             return
         }
 
-        state = .loading
-
-        switch model {
-        case .parakeet:
-            let dir = AsrModels.defaultCacheDirectory(for: .v3)
-            let asrModels = try await AsrModels.load(from: dir, version: .v3)
-            let manager = AsrManager(config: .default)
-            try await manager.initialize(models: asrModels)
-            parakeetManager = manager
-
-        case .qwen:
-            let dir = Qwen3AsrModels.defaultCacheDirectory()
-            let manager = Qwen3AsrManager()
-            try await manager.loadModels(from: dir)
-            qwen3Manager = manager
+        // If a load is already in-flight, await it instead of starting a duplicate.
+        if let existing = loadTask {
+            try await existing.value
+            return
         }
 
-        state = .ready
-        refreshModelSizeOnDisk()
+        state = .loading
+
+        let task = Task<Void, any Error> {
+            switch model {
+            case .parakeet:
+                let dir = AsrModels.defaultCacheDirectory(for: .v3)
+                let asrModels = try await AsrModels.load(from: dir, version: .v3)
+                let manager = AsrManager(config: .default)
+                try await manager.initialize(models: asrModels)
+                await MainActor.run { parakeetManager = manager }
+
+            case .qwen:
+                let dir = Qwen3AsrModels.defaultCacheDirectory()
+                let manager = Qwen3AsrManager()
+                try await manager.loadModels(from: dir)
+                await MainActor.run { qwen3Manager = manager }
+            }
+        }
+        loadTask = task
+
+        do {
+            try await task.value
+            loadTask = nil
+            state = .ready
+            refreshModelSizeOnDisk()
+        } catch {
+            loadTask = nil
+            throw error
+        }
     }
 
     /// Transcribes audio from a file URL.
@@ -206,10 +223,15 @@ class FluidAudioModelManager: ObservableObject {
 
     /// Releases the loaded runtime from memory while keeping files on disk.
     func unloadModelFromMemory() {
+        loadTask?.cancel()
+        loadTask = nil
         parakeetManager = nil
         qwen3Manager = nil
-        if case .ready = state {
+        switch state {
+        case .ready, .loading:
             state = .downloaded
+        default:
+            break
         }
     }
 

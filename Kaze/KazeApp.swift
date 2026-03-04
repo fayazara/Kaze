@@ -310,7 +310,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let hostingController = NSHostingController(rootView: contentView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -494,7 +494,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let engine = transcriptionEngine
 
-        if enhancementMode == .appleIntelligence, let enhancer {
+        // Only apply AI enhancement for Direct Dictation — AI models already produce enhanced output.
+        if enhancementMode == .appleIntelligence, engine == .dictation, let enhancer {
             overlayState.isEnhancing = true
             setEnhancingState(true)
             Task {
@@ -560,7 +561,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleIdleModelUnload() {
         idleModelUnloadTask?.cancel()
         idleModelUnloadTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.modelUnloadIdleDelay)
+            do {
+                try await Task.sleep(for: Self.modelUnloadIdleDelay)
+            } catch {
+                return // Task was cancelled, don't unload
+            }
             await MainActor.run {
                 guard let self else { return }
                 guard !self.isSessionActive else { return }
