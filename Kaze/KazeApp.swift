@@ -105,7 +105,8 @@ struct KazeApp: App {
                 parakeetModelManager: appDelegate.parakeetModelManager,
                 qwenModelManager: appDelegate.qwenModelManager,
                 historyManager: appDelegate.historyManager,
-                customWordsManager: appDelegate.customWordsManager
+                customWordsManager: appDelegate.customWordsManager,
+                updaterManager: appDelegate.updaterManager
             )
             .frame(minWidth: 480, maxWidth: 520)
         }
@@ -124,6 +125,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let qwenModelManager = FluidAudioModelManager(model: .qwen)
     let historyManager = TranscriptionHistoryManager()
     let customWordsManager = CustomWordsManager()
+
+    let updaterManager = UpdaterManager()
 
     private let hotkeyManager = HotkeyManager()
     private let overlayWindow = RecordingOverlayWindow()
@@ -246,6 +249,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         observeModelState()
         updateStatusItemIndicator()
 
+        // Start Sparkle updater (safe to call before permissions; it only
+        // fetches the appcast over the network and never touches the mic).
+        updaterManager.start()
+
         Task {
             let granted = await speechTranscriber.requestPermissions()
             if !granted {
@@ -280,6 +287,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let aboutItem = NSMenuItem(title: "About Kaze", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
+
+        let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -383,6 +394,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         controller.showWindow(nil)
     }
 
+    @objc private func checkForUpdates() {
+        updaterManager.checkForUpdates()
+    }
+
     @objc private func openSettings() {
         if let window = settingsWindowController?.window {
             NSApp.activate(ignoringOtherApps: true)
@@ -395,7 +410,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             parakeetModelManager: parakeetModelManager,
             qwenModelManager: qwenModelManager,
             historyManager: historyManager,
-            customWordsManager: customWordsManager
+            customWordsManager: customWordsManager,
+            updaterManager: updaterManager
         )
         .frame(minWidth: 480, maxWidth: 520)
         let hostingController = NSHostingController(rootView: contentView)

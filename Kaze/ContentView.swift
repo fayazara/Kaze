@@ -36,6 +36,7 @@ struct ContentView: View {
     @ObservedObject var qwenModelManager: FluidAudioModelManager
     @ObservedObject var historyManager: TranscriptionHistoryManager
     @ObservedObject var customWordsManager: CustomWordsManager
+    @ObservedObject var updaterManager: UpdaterManager
 
     @State private var selectedTab: SettingsTab = .general
 
@@ -53,7 +54,8 @@ struct ContentView: View {
                     GeneralSettingsView(
                         whisperModelManager: whisperModelManager,
                         parakeetModelManager: parakeetModelManager,
-                        qwenModelManager: qwenModelManager
+                        qwenModelManager: qwenModelManager,
+                        updaterManager: updaterManager
                     )
                 case .vocabulary:
                     VocabularySettingsView(customWordsManager: customWordsManager)
@@ -117,6 +119,7 @@ private struct GeneralSettingsView: View {
     @ObservedObject var whisperModelManager: WhisperModelManager
     @ObservedObject var parakeetModelManager: FluidAudioModelManager
     @ObservedObject var qwenModelManager: FluidAudioModelManager
+    @ObservedObject var updaterManager: UpdaterManager
 
     private var selectedEngine: TranscriptionEngine {
         TranscriptionEngine(rawValue: engineRaw) ?? .dictation
@@ -365,6 +368,28 @@ private struct GeneralSettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
+            }
+
+            sectionDivider()
+
+            // MARK: Updates
+            formRow("Auto-update:") {
+                Toggle(isOn: Binding(
+                    get: { updaterManager.automaticallyChecksForUpdates },
+                    set: { updaterManager.automaticallyChecksForUpdates = $0 }
+                )) {
+                    Text("Automatically check for updates")
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+
+            formRow("") {
+                Button("Check for Updates…") {
+                    updaterManager.checkForUpdates()
+                }
+                .controlSize(.small)
+                .disabled(!updaterManager.canCheckForUpdates)
             }
 
             Spacer(minLength: 20)

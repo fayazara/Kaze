@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+  xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Kaze Updates</title>
+    <link>https://raw.githubusercontent.com/fayazara/Kaze/main/appcast.xml</link>
+    <language>en</language>
+
+    <!--
+      HOW TO ADD A NEW RELEASE:
+      1. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in Xcode
+      2. Build your .dmg
+      3. Run: sign_update /path/to/Kaze.dmg
+         (tool is at ~/Library/Developer/Xcode/DerivedData/Kaze-*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update)
+      4. Copy a new <item> block below, fill in version, signature, length, and download URL
+      5. Commit appcast.xml to main, then create the GitHub Release with the .dmg
+
+      Newest release goes on top.
+    -->
+
+    <item>
+      <title>Version 0.7</title>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>0.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <pubDate>Sun, 08 Mar 2026 16:30:00 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 0.7</h2>
+        <ul>
+          <li>Auto-update support ��� Kaze now checks for updates automatically via Sparkle</li>
+          <li>Check for Updates menu item and Settings toggle</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v0.7/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="BhZbe6LYkMTEoe1TptO08XtljXvZtQvKkyzlswnj9lauNNx6SgfASg75Rz+OnumPbww4RzJArSDRSWWe9wCqAA=="
+        length="6466102"
+      />
+    </item>
+
+  </channel>
+</rss>

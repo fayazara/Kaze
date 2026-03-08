@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		31FLUID0022F4D76D200E96913 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 31FLUID0012F4D76D200E96913 /* FluidAudio */; };
+		31SPARKLE022F4D76D200E96913 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31SPARKLE012F4D76D200E96913 /* Sparkle */; };
 		31WHISPER022F4D76D200E96913 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31WHISPER012F4D76D200E96913 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
@@ -38,6 +39,7 @@
 			files = (
 				31WHISPER022F4D76D200E96913 /* WhisperKit in Frameworks */,
 				31FLUID0022F4D76D200E96913 /* FluidAudio in Frameworks */,
+				31SPARKLE022F4D76D200E96913 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +104,7 @@
 			packageProductDependencies = (
 				31WHISPER012F4D76D200E96913 /* WhisperKit */,
 				31FLUID0012F4D76D200E96913 /* FluidAudio */,
+				31SPARKLE012F4D76D200E96913 /* Sparkle */,
 			);
 			productName = Kaze;
 			productReference = 31F19CCD2F4D76D200E96913 /* Kaze.app */;
@@ -137,6 +140,7 @@
 			packageReferences = (
 				31WHISPER002F4D76D200E96913 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				31FLUID0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -360,7 +364,7 @@
 				CODE_SIGN_ENTITLEMENTS = Kaze/Kaze.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = TB2S44TFQS;
 				ENABLE_APP_SANDBOX = YES;
@@ -375,12 +379,14 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kaze uses on-device speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/fayazara/Kaze/main/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "MA/6n0fqT0T2updDlkXr8BjhJKoHWik9uf6Lh5pUG7U=";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.Kaze;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -402,7 +408,7 @@
 				CODE_SIGN_ENTITLEMENTS = Kaze/Kaze.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = TB2S44TFQS;
 				ENABLE_APP_SANDBOX = YES;
@@ -417,12 +423,14 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze needs microphone access to transcribe your speech.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kaze uses on-device speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/fayazara/Kaze/main/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "MA/6n0fqT0T2updDlkXr8BjhJKoHWik9uf6Lh5pUG7U=";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.Kaze;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -476,6 +484,14 @@
 				kind = branch;
 			};
 		};
+		31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
 		31WHISPER002F4D76D200E96913 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -491,6 +507,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 31FLUID0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		31SPARKLE012F4D76D200E96913 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 		31WHISPER012F4D76D200E96913 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
