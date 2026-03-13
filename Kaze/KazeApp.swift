@@ -135,6 +135,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
     private var appearanceObservation: NSKeyValueObservation?
+    /// Tracks the last icon name applied to the status bar button to prevent
+    /// a KVO feedback loop where setting the image triggers an appearance
+    /// change notification which calls updateStatusBarIcon() again endlessly.
+    private var lastAppliedIconName: String?
 
     private var enhancer: TextEnhancer?
     private var settingsWindowController: NSWindowController?
@@ -281,6 +285,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let button = statusItem?.button else { return }
         let isDark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let iconName = isDark ? "kaze-icon" : "kaze-icon-black"
+
+        // Guard against redundant updates to break the KVO feedback loop:
+        // setting button.image triggers an AppKit redraw which fires the
+        // effectiveAppearance KVO observer, which calls this method again.
+        // Without this guard the loop runs as fast as the CPU can go (~91% CPU).
+        guard iconName != lastAppliedIconName else { return }
+        lastAppliedIconName = iconName
+
         if let icon = NSImage(named: iconName) {
             icon.size = NSSize(width: 18, height: 18)
             button.image = icon
