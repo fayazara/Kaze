@@ -642,6 +642,7 @@ private struct GeneralSettingsView: View {
 private struct ControlsSettingsView: View {
     @AppStorage(AppPreferenceKey.notchMode) private var notchMode = true
     @AppStorage(AppPreferenceKey.appendTrailingSpace) private var appendTrailingSpace = false
+    @AppStorage(AppPreferenceKey.removeFillerWords) private var removeFillerWords = false
     @ObservedObject var updaterManager: UpdaterManager
 
     var body: some View {
@@ -677,6 +678,20 @@ private struct ControlsSettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
+            }
+
+            formRow("Filler words:") {
+                Toggle(isOn: $removeFillerWords) {
+                    Text("Remove filler words (uh, um, er, hmm, ...)")
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+
+            formRow("") {
+                Text("Automatically strips hesitation sounds like \"uh\", \"um\", \"hmm\", and similar fillers from transcriptions before pasting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             sectionDivider()

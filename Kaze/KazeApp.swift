@@ -83,6 +83,7 @@ enum AppPreferenceKey {
     static let notchMode = "notchMode"
     static let selectedMicrophoneID = "selectedMicrophoneID"
     static let appendTrailingSpace = "appendTrailingSpace"
+    static let removeFillerWords = "removeFillerWords"
     static let launchAtLogin = "launchAtLogin"
 
     static let defaultEnhancementPrompt = """
@@ -693,7 +694,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Clear the "processing" state from Whisper
         overlayState.isEnhancing = false
 
-        guard !rawText.isEmpty else {
+        // Optionally strip filler words (uh, um, er, hmm, etc.) before any further processing.
+        let cleanedText: String
+        if UserDefaults.standard.bool(forKey: AppPreferenceKey.removeFillerWords) {
+            cleanedText = FillerWordCleaner.clean(rawText)
+        } else {
+            cleanedText = rawText
+        }
+
+        guard !cleanedText.isEmpty else {
             overlayWindow.hide(state: overlayState)
             isSessionActive = false
             activeSession = nil
@@ -728,29 +737,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         if !words.isEmpty {
                             prompt += "\n\nIMPORTANT: The following are custom words, names, or abbreviations the user has defined. Always preserve their exact spelling and casing: \(words.joined(separator: ", "))."
                         }
-                        let enhanced = try await enhancer.enhance(rawText, systemPrompt: prompt)
+                        let enhanced = try await enhancer.enhance(cleanedText, systemPrompt: prompt)
                         self.typeText(enhanced)
                         self.historyManager.addRecord(
                             TranscriptionRecord(text: enhanced, engine: engine, wasEnhanced: true)
                         )
                     } else {
-                        self.typeText(rawText)
+                        self.typeText(cleanedText)
                         self.historyManager.addRecord(
-                            TranscriptionRecord(text: rawText, engine: engine, wasEnhanced: false)
+                            TranscriptionRecord(text: cleanedText, engine: engine, wasEnhanced: false)
                         )
                     }
                 } catch {
                     print("AI enhancement failed, using raw text: \(error)")
-                    self.typeText(rawText)
+                    self.typeText(cleanedText)
                     self.historyManager.addRecord(
-                        TranscriptionRecord(text: rawText, engine: engine, wasEnhanced: false)
+                        TranscriptionRecord(text: cleanedText, engine: engine, wasEnhanced: false)
                     )
                 }
             }
         } else {
-            typeText(rawText)
+            typeText(cleanedText)
             historyManager.addRecord(
-                TranscriptionRecord(text: rawText, engine: engine, wasEnhanced: false)
+                TranscriptionRecord(text: cleanedText, engine: engine, wasEnhanced: false)
             )
             overlayWindow.hide(state: overlayState)
             isSessionActive = false
