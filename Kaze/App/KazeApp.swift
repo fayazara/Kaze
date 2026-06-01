@@ -8,18 +8,16 @@ struct KazeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        Settings {
-            ContentView(
-                whisperModelManager: appDelegate.whisperModelManager,
-                parakeetModelManager: appDelegate.parakeetModelManager,
-                historyManager: appDelegate.historyManager,
-                customWordsManager: appDelegate.customWordsManager,
-                updaterManager: appDelegate.updaterManager,
-                restartOnboarding: appDelegate.restartOnboarding
-            )
-            .frame(width: 760, height: 640)
+        // Kaze is a menu-bar-only app; its UI is driven entirely by the
+        // status item (AppDelegate) and the SettingsWindowController. This
+        // placeholder scene satisfies the App protocol without ever opening
+        // a real window.
+        Window("Kaze", id: "kaze-placeholder") {
+            Color.clear.frame(width: 0, height: 0)
         }
+        .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentSize)
+        .commandsRemoved()
     }
 }
 
@@ -48,10 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// change notification which calls updateStatusBarIcon() again endlessly.
     private var lastAppliedIconName: String?
 
-    private var enhancer: TextEnhancer?
-    private var formatter: TextFormatter?
     private let cloudEnhancer = CloudEnhancer()
-    private var settingsWindowController: NSWindowController?
     private var onboardingWindowController: NSWindowController?
 
     var transcriptionEngine: TranscriptionEngine {
@@ -61,16 +56,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: AppPreferenceKey.transcriptionEngine)
-        }
-    }
-
-    private var enhancementMode: EnhancementMode {
-        get {
-            let raw = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementMode)
-            return EnhancementMode(rawValue: raw ?? "") ?? .off
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: AppPreferenceKey.enhancementMode)
         }
     }
 
@@ -109,7 +94,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// preference changes cannot route stop/finalize through the wrong engine.
     private struct RecordingSession {
         let engine: TranscriptionEngine
-        let enhancementMode: EnhancementMode
         let transcriber: any TranscriberProtocol
         let source: TranscriptionSource?
         let startedAt: Date
@@ -152,11 +136,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         migrateLegacyPreferences()
 
-        // Set up Apple Intelligence enhancer and formatter if available
-        if #available(macOS 26.0, *), TextEnhancer.isAvailable {
-            enhancer = TextEnhancer()
-            formatter = TextFormatter()
-        }
+        // Inject managers into the settings window controller (single source
+        // of truth for the settings UI).
+        SettingsWindowController.configure(
+            SettingsWindowController.Dependencies(
+                whisperModelManager: whisperModelManager,
+                parakeetModelManager: parakeetModelManager,
+                historyManager: historyManager,
+                customWordsManager: customWordsManager,
+                updaterManager: updaterManager,
+                restartOnboarding: { [weak self] in self?.restartOnboarding() }
+            )
+        )
 
         // Menu bar icon — use a dark/light appearance-aware icon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -190,10 +181,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func migrateLegacyPreferences() {
         let defaults = UserDefaults.standard
-        if defaults.string(forKey: AppPreferenceKey.enhancementMode) == nil,
-           defaults.object(forKey: "aiEnhanceEnabled") != nil {
-            let oldEnabled = defaults.bool(forKey: "aiEnhanceEnabled")
-            enhancementMode = oldEnabled ? .appleIntelligence : .off
+        if defaults.object(forKey: AppPreferenceKey.smartFormattingEnabled) == nil {
+            let legacyCloudAIEnabled = defaults.string(forKey: "enhancementMode") == "cloudAI"
+            if legacyCloudAIEnabled {
+                defaults.set(true, forKey: AppPreferenceKey.smartFormattingEnabled)
+            }
+        }
+        if defaults.string(forKey: "smartFormattingBackend") == "appleIntelligence",
+           defaults.bool(forKey: AppPreferenceKey.smartFormattingEnabled) {
+            defaults.set(false, forKey: AppPreferenceKey.smartFormattingEnabled)
         }
 
         let storedMicrophone = defaults.string(forKey: AppPreferenceKey.selectedMicrophoneID) ?? ""
@@ -257,7 +253,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func showAbout() {
-        openSettingsWindow(initialTab: .about)
+        SettingsWindowController.show(tab: .about)
     }
 
     private func observeModelState() {
@@ -347,8 +343,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let controller = NSWindowController(window: window)
         onboardingWindowController = controller
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        AppActivationPolicy.enter()
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         centerWindow(window)
@@ -397,58 +392,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func openSettings() {
-        openSettingsWindow(initialTab: .general)
-    }
-
-    private func openSettingsWindow(initialTab: SettingsTab) {
-        presentManagedWindow {
-            if let window = self.settingsWindowController?.window {
-                if let hostingController = window.contentViewController as? NSHostingController<AnyView> {
-                    hostingController.rootView = self.makeSettingsContent(initialTab: initialTab)
-                }
-                self.settingsWindowController?.showWindow(nil)
-                self.bringWindowToFront(window)
-                return
-            }
-
-            let contentView = self.makeSettingsContent(initialTab: initialTab)
-            let hostingController = NSHostingController(rootView: contentView)
-
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
-                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
-            window.minSize = NSSize(width: 760, height: 640)
-            window.maxSize = NSSize(width: 760, height: 640)
-            window.center()
-            window.title = "Settings"
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
-            window.contentViewController = hostingController
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-
-            let controller = NSWindowController(window: window)
-            self.settingsWindowController = controller
-            controller.showWindow(nil)
-            self.bringWindowToFront(window)
-        }
-    }
-
-    private func makeSettingsContent(initialTab: SettingsTab) -> AnyView {
-        AnyView(ContentView(
-            whisperModelManager: whisperModelManager,
-            parakeetModelManager: parakeetModelManager,
-            historyManager: historyManager,
-            customWordsManager: customWordsManager,
-            updaterManager: updaterManager,
-            restartOnboarding: restartOnboarding,
-            initialTab: initialTab
-        )
-        .frame(width: 760, height: 640))
+        SettingsWindowController.show(tab: .general)
     }
 
     private func presentManagedWindow(_ action: @escaping () -> Void) {
@@ -459,27 +403,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    private func bringWindowToFront(_ window: NSWindow) {
-        window.orderFrontRegardless()
-        window.makeKeyAndOrderFront(nil)
-    }
-
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
 
-        if settingsWindowController?.window === window {
-            settingsWindowController = nil
-        }
+        // The settings window is owned by SettingsWindowController, which
+        // manages its own activation policy. Here we only handle onboarding.
         if onboardingWindowController?.window === window {
             onboardingWindowController = nil
-        }
-
-        // If no managed windows remain visible, revert to accessory (no dock icon)
-        let hasVisibleWindow = [settingsWindowController, onboardingWindowController]
-            .compactMap { $0?.window }
-            .contains { $0.isVisible }
-        if !hasVisibleWindow {
-            NSApp.setActivationPolicy(.accessory)
+            AppActivationPolicy.leave()
         }
     }
 
@@ -528,11 +459,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         idleModelUnloadTask = nil
         overlayState.processingStatusText = ""
 
-        // Capture engine and enhancement mode at session start so that mid-session
-        // preference changes cannot route stop/finalize through the wrong engine.
+        // Capture engine at session start so that mid-session preference changes
+        // cannot route stop/finalize through the wrong engine.
         let preferredEngine = transcriptionEngine
         let engine: TranscriptionEngine
-        let enhancement = enhancementMode
         let source = currentSourceApplication()
 
         // Check if the selected engine's model is available
@@ -568,7 +498,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             activeSession = RecordingSession(
                 engine: engine,
-                enhancementMode: enhancement,
                 transcriber: whisper,
                 source: source,
                 startedAt: Date()
@@ -588,7 +517,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             activeSession = RecordingSession(
                 engine: engine,
-                enhancementMode: enhancement,
                 transcriber: transcriber,
                 source: source,
                 startedAt: Date()
@@ -605,7 +533,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             activeSession = RecordingSession(
                 engine: engine,
-                enhancementMode: enhancement,
                 transcriber: speechTranscriber,
                 source: source,
                 startedAt: Date()
@@ -635,8 +562,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             overlayState.processingStatusText = processingStatusText(for: engine)
         } else {
             (session.transcriber as? SpeechTranscriber)?.stopRecording()
-            let waitingForAI = session.enhancementMode == .appleIntelligence && enhancer != nil
-            if !waitingForAI {
+            let waitingForFormatting = UserDefaults.standard.bool(forKey: AppPreferenceKey.smartFormattingEnabled)
+            if !waitingForFormatting {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                     self?.overlayWindow.hide(state: self?.overlayState)
                     self?.isSessionActive = false
@@ -674,29 +601,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         let engine = session?.engine ?? transcriptionEngine
-        let enhancement = session?.enhancementMode ?? enhancementMode
         let speechDuration = session?.speechDuration ?? 0
         let source = session?.source
 
-        // Determine what post-processing is needed
+        // Smart Formatting is the only AI post-processing step.
         let smartFormattingEnabled = UserDefaults.standard.bool(forKey: AppPreferenceKey.smartFormattingEnabled)
-        let formattingBackendRaw = UserDefaults.standard.string(forKey: AppPreferenceKey.smartFormattingBackend) ?? FormattingBackend.appleIntelligence.rawValue
-        let formattingBackend = FormattingBackend(rawValue: formattingBackendRaw) ?? .appleIntelligence
 
-        // Enhancement: Apple Intelligence (Dictation only), Cloud AI (all engines)
-        let needsLocalEnhancement = enhancement == .appleIntelligence && engine == .dictation && enhancer != nil
-        let needsCloudEnhancement = enhancement == .cloudAI
-
-        // Formatting: Apple Intelligence (local) or Cloud AI
-        let needsLocalFormatting = smartFormattingEnabled && formattingBackend == .appleIntelligence && formatter != nil
-        let needsCloudFormatting = smartFormattingEnabled && formattingBackend == .cloudAI
-
-        let needsAsyncProcessing = needsLocalEnhancement || needsCloudEnhancement || needsLocalFormatting || needsCloudFormatting
-
-        if needsAsyncProcessing {
-            let statusText = (needsLocalEnhancement || needsCloudEnhancement) ? "Enhancing text..." : "Formatting..."
+        if smartFormattingEnabled {
             overlayState.isEnhancing = true
-            overlayState.processingStatusText = statusText
+            overlayState.processingStatusText = "Formatting..."
             setEnhancingState(true, session: session)
             Task {
                 defer {
@@ -710,67 +623,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     self.scheduleIdleModelUnload()
                 }
                 var processedText = cleanedText
-                var wasEnhanced = false
+                var wasFormatted = false
 
-                // Build the enhancement system prompt with custom vocabulary
-                var enhancementPrompt = UserDefaults.standard.string(forKey: AppPreferenceKey.enhancementSystemPrompt)
-                    ?? AppPreferenceKey.defaultEnhancementPrompt
-                let words = self.customWordsManager.words
-                if !words.isEmpty {
-                    enhancementPrompt += "\n\nIMPORTANT: The following are custom words, names, or abbreviations the user has defined. Always preserve their exact spelling and casing: \(words.joined(separator: ", "))."
-                }
-
-                // Step 1: AI Enhancement
-                if needsLocalEnhancement {
-                    do {
-                        if #available(macOS 26.0, *) {
-                            processedText = try await enhancer!.enhance(processedText, systemPrompt: enhancementPrompt)
-                            wasEnhanced = true
-                        }
-                    } catch {
-                        print("Apple Intelligence enhancement failed: \(error)")
-                    }
-                } else if needsCloudEnhancement {
-                    do {
-                        let provider = CloudAIProvider(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIProvider) ?? "") ?? .openAI
-                        let modelID = UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIModel) ?? provider.defaultModel.id
-                        processedText = try await self.cloudEnhancer.enhance(
-                            processedText,
-                            systemPrompt: enhancementPrompt,
-                            provider: provider,
-                            modelID: modelID
-                        )
-                        wasEnhanced = true
-                    } catch {
-                        print("Cloud AI enhancement failed: \(error)")
-                    }
-                }
-
-                // Step 2: Smart Formatting
-                if needsLocalFormatting || needsCloudFormatting {
-                    self.overlayState.processingStatusText = "Formatting..."
-
-                    if needsLocalFormatting {
-                        do {
-                            if #available(macOS 26.0, *) {
-                                processedText = try await self.formatter!.format(processedText)
-                            }
-                        } catch {
-                            print("Apple Intelligence formatting failed: \(error)")
-                        }
-                    } else if needsCloudFormatting {
-                        do {
-                            let provider = CloudAIProvider(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIProvider) ?? "") ?? .openAI
-                            let modelID = UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIModel) ?? provider.defaultModel.id
-                            processedText = try await self.cloudEnhancer.format(
-                                processedText,
-                                provider: provider,
-                                modelID: modelID
-                            )
-                        } catch {
-                            print("Cloud AI formatting failed: \(error)")
-                        }
-                    }
+                do {
+                    let provider = CloudAIProvider(rawValue: UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIProvider) ?? "") ?? .openAI
+                    let modelID = UserDefaults.standard.string(forKey: AppPreferenceKey.cloudAIModel) ?? provider.defaultModel.id
+                    processedText = try await self.cloudEnhancer.format(
+                        processedText,
+                        provider: provider,
+                        modelID: modelID,
+                        customWords: self.customWordsManager.words
+                    )
+                    wasFormatted = true
+                } catch {
+                    print("Cloud AI formatting failed: \(error)")
                 }
 
                 self.typeText(processedText)
@@ -778,7 +644,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     TranscriptionRecord(
                         text: processedText,
                         engine: engine,
-                        wasEnhanced: wasEnhanced,
+                        wasEnhanced: wasFormatted,
                         speechDuration: speechDuration,
                         source: source
                     )
@@ -806,7 +672,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func processingStatusText(for engine: TranscriptionEngine) -> String {
         switch engine {
         case .dictation:
-            return "Enhancing text..."
+            return "Formatting..."
         case .whisper:
             return processingStatusText(for: whisperModelManager.state)
         case .parakeet:

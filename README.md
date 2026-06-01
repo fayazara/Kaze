@@ -1,6 +1,6 @@
 # Kaze
 
-Hold a global hotkey, speak, and the transcribed text is automatically pasted into whatever app you're using. Everything runs locally on your Mac -- no cloud, no API keys, no data leaves your machine.
+Hold a global hotkey, speak, and the transcribed text is automatically pasted into whatever app you're using. Transcription runs locally on your Mac, with optional Smart Formatting through your own AI provider API key.
 
 https://github.com/user-attachments/assets/8fde004a-e07a-45fc-ae3c-8f8a216873d3
 
@@ -23,7 +23,7 @@ The app lives entirely in the menu bar with no Dock icon. On first launch, a gui
 
 > **Personal recommendation** -- use **Parakeet v3 (NVIDIA)** for the best overall results.
 
-Kaze ships with **4 fully on-device transcription engines**:
+Kaze ships with **3 transcription engines**:
 
 | Engine | Framework | Notes |
 |---|---|---|
@@ -44,14 +44,13 @@ Kaze ships with **4 fully on-device transcription engines**:
 - **Pill mode** -- traditional floating pill at the bottom-center of the screen
 - **Real-time waveform bars** driven by audio level
 - **Live scrolling transcription** text with leading fade mask
-- **Processing state** -- shimmer animation + spinner while model inference or text enhancement runs
+- **Processing state** -- shimmer animation + spinner while model inference or smart formatting runs
 
-### Apple Intelligence enhancement
+### Smart Formatting
 
-- Post-process transcriptions with on-device Foundation Models to fix grammar, punctuation, and formatting (macOS 26.0+)
-- **Customizable system prompt** -- edit the enhancement instructions or reset to defaults
-- Custom vocabulary words are injected into the enhancement prompt for better accuracy
-- Only applies to Direct Dictation (AI model engines already produce clean output)
+- Post-process transcriptions with direct provider Cloud AI requests to add paragraphs, lists, punctuation, and spoken formatting cues
+- Supports OpenAI, Gemini, and Anthropic API keys stored in Keychain
+- Custom vocabulary words are injected into the formatting prompt for better accuracy
 
 ### Global hotkey
 
@@ -74,7 +73,7 @@ Kaze ships with **4 fully on-device transcription engines**:
 ### Other features
 
 - **Custom vocabulary/keywords** -- add names, abbreviations, and domain terms to improve recognition across all engines
-- **Transcription history** -- persistent local history (latest 50 entries) with engine labels, "Enhanced" badge, relative timestamps, and one-click copy
+- **Transcription history** -- persistent local history (latest 50 entries) with engine labels, "Formatted" badge, relative timestamps, and one-click copy
 - **Clipboard-safe auto-paste** -- saves and restores your clipboard contents around each paste
 - **Trailing space option** -- optionally append a space after each transcription
 - **Launch at login** -- start Kaze automatically when you log in
@@ -89,7 +88,7 @@ Kaze ships with **4 fully on-device transcription engines**:
 | Speech | **Apple Speech framework** (`SFSpeechRecognizer`) for real-time streaming dictation |
 | Whisper | [**WhisperKit**](https://github.com/argmaxinc/WhisperKit) for local OpenAI Whisper transcription |
 | Parakeet | [**FluidAudio**](https://github.com/FluidInference/FluidAudio) for Parakeet v3 CoreML runtime |
-| Enhancement | **Foundation Models** (Apple Intelligence on-device LLM) for text cleanup |
+| Smart Formatting | Direct HTTP requests to OpenAI, Gemini, or Anthropic |
 | Hotkey | **CGEvent** tap for low-level global hotkey detection |
 | Audio | **AVCaptureSession** + **Accelerate/vDSP** for microphone capture, format conversion, and resampling |
 | State | **Combine** for reactive state bridging between transcription engines and the UI |

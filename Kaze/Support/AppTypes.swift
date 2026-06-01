@@ -99,38 +99,6 @@ enum HotkeyMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum EnhancementMode: String, CaseIterable, Identifiable {
-    case off
-    case appleIntelligence
-    case cloudAI
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .off: return "Off"
-        case .appleIntelligence: return "Apple Intelligence"
-        case .cloudAI: return "Cloud AI"
-        }
-    }
-}
-
-// MARK: - Smart Formatting Backend
-
-enum FormattingBackend: String, CaseIterable, Identifiable {
-    case appleIntelligence
-    case cloudAI
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .appleIntelligence: return "Apple Intelligence (Local)"
-        case .cloudAI: return "Cloud AI"
-        }
-    }
-}
-
 // MARK: - Cloud AI Provider & Models
 
 enum CloudAIProvider: String, CaseIterable, Identifiable {
@@ -155,7 +123,7 @@ enum CloudAIProvider: String, CaseIterable, Identifiable {
 
     /// The reasoning effort level to pass in the request, or nil if unsupported.
     /// OpenAI: "low" disables deep reasoning on reasoning-capable models.
-    /// Anthropic/Google: nil (not supported via the OpenAI compat schema).
+    /// Anthropic/Google: nil (not supported by the app's direct provider requests).
     var reasoningEffort: String? {
         switch self {
         case .openAI: return "low"
@@ -177,21 +145,21 @@ enum CloudAIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .openAI:
             return [
-                CloudAIModel(id: "openai/gpt-5.4", title: "GPT-5.4", provider: .openAI),
-                CloudAIModel(id: "openai/gpt-5.4-mini", title: "GPT-5.4 Mini", provider: .openAI),
-                CloudAIModel(id: "openai/gpt-5.4-nano", title: "GPT-5.4 Nano", provider: .openAI),
+                CloudAIModel(id: "gpt-5.4", title: "GPT-5.4", provider: .openAI),
+                CloudAIModel(id: "gpt-5.4-mini", title: "GPT-5.4 Mini", provider: .openAI),
+                CloudAIModel(id: "gpt-5.4-nano", title: "GPT-5.4 Nano", provider: .openAI),
             ]
         case .google:
             return [
-                CloudAIModel(id: "google-ai-studio/gemini-3.1-pro-preview", title: "Gemini 3.1 Pro", provider: .google),
-                CloudAIModel(id: "google-ai-studio/gemini-3-flash-preview", title: "Gemini 3 Flash", provider: .google),
-                CloudAIModel(id: "google-ai-studio/gemini-3.1-flash-lite-preview", title: "Gemini 3.1 Flash Lite", provider: .google),
+                CloudAIModel(id: "gemini-3.1-pro-preview", title: "Gemini 3.1 Pro", provider: .google),
+                CloudAIModel(id: "gemini-3-flash-preview", title: "Gemini 3 Flash", provider: .google),
+                CloudAIModel(id: "gemini-3.1-flash-lite-preview", title: "Gemini 3.1 Flash Lite", provider: .google),
             ]
         case .anthropic:
             return [
-                CloudAIModel(id: "anthropic/claude-sonnet-4-6", title: "Claude Sonnet 4.6", provider: .anthropic),
-                CloudAIModel(id: "anthropic/claude-opus-4-6", title: "Claude Opus 4.6", provider: .anthropic),
-                CloudAIModel(id: "anthropic/claude-haiku-4-5", title: "Claude Haiku 4.5", provider: .anthropic),
+                CloudAIModel(id: "claude-sonnet-4-6", title: "Claude Sonnet 4.6", provider: .anthropic),
+                CloudAIModel(id: "claude-opus-4-6", title: "Claude Opus 4.6", provider: .anthropic),
+                CloudAIModel(id: "claude-haiku-4-5", title: "Claude Haiku 4.5", provider: .anthropic),
             ]
         }
     }
@@ -199,6 +167,33 @@ enum CloudAIProvider: String, CaseIterable, Identifiable {
     /// The default (first) model for this provider.
     var defaultModel: CloudAIModel {
         models[0]
+    }
+
+    /// Converts older provider-prefixed model IDs into native provider IDs.
+    func nativeModelID(from modelID: String) -> String {
+        let prefixes: [String]
+
+        switch self {
+        case .openAI:
+            prefixes = ["openai/"]
+        case .google:
+            prefixes = ["google-ai-studio/"]
+        case .anthropic:
+            prefixes = ["anthropic/"]
+        }
+
+        for prefix in prefixes where modelID.hasPrefix(prefix) {
+            return String(modelID.dropFirst(prefix.count))
+        }
+
+        return modelID
+    }
+
+    /// Returns a picker-safe native model ID, falling back to the provider default
+    /// when a stale value belongs to a different provider.
+    func supportedModelID(from modelID: String) -> String {
+        let nativeID = nativeModelID(from: modelID)
+        return models.contains { $0.id == nativeID } ? nativeID : defaultModel.id
     }
 }
 

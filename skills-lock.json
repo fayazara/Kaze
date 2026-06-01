@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "macos-settings-ui": {
+      "source": "fayazara/macos-app-skills",
+      "sourceType": "github",
+      "skillPath": "settings-ui/SKILL.md",
+      "computedHash": "31d1a4f1d86375291fded0015e93f48e725d24ce72573028eb72902d70aad250"
+    },
     "skill-creator": {
       "source": "anthropics/skills",
       "sourceType": "github",

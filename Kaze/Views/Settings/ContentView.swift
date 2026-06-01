@@ -53,103 +53,109 @@ private enum AppVersion {
     }()
 }
 
-// MARK: - Root View
+// MARK: - Root Settings View
 
-struct ContentView: View {
-    @ObservedObject var whisperModelManager: WhisperModelManager
-    @ObservedObject var parakeetModelManager: FluidAudioModelManager
-    @ObservedObject var historyManager: TranscriptionHistoryManager
-    @ObservedObject var customWordsManager: CustomWordsManager
-    @ObservedObject var updaterManager: UpdaterManager
-    let restartOnboarding: () -> Void
+struct SettingsView: View {
+    let dependencies: SettingsWindowController.Dependencies?
 
-    @State private var selectedTab: SettingsTab? = .general
-
-    init(
-        whisperModelManager: WhisperModelManager,
-        parakeetModelManager: FluidAudioModelManager,
-        historyManager: TranscriptionHistoryManager,
-        customWordsManager: CustomWordsManager,
-        updaterManager: UpdaterManager,
-        restartOnboarding: @escaping () -> Void,
-        initialTab: SettingsTab = .general
-    ) {
-        self.whisperModelManager = whisperModelManager
-        self.parakeetModelManager = parakeetModelManager
-        self.historyManager = historyManager
-        self.customWordsManager = customWordsManager
-        self.updaterManager = updaterManager
-        self.restartOnboarding = restartOnboarding
-        _selectedTab = State(initialValue: initialTab)
-    }
+    @State private var navigation = SettingsNavigation.shared
+    @State private var navigationHistory: [SettingsTab] = [.general]
+    @State private var historyIndex = 0
+    @State private var isHistoryNavigation = false
 
     private var activeTab: SettingsTab {
-        selectedTab ?? .general
+        navigation.selectedTab ?? .general
     }
 
     var body: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                List(SettingsTab.allCases, selection: $selectedTab) { tab in
-                    SettingsSidebarRow(tab: tab)
-                        .tag(tab)
-                }
-                .listStyle(.sidebar)
-
-                SettingsSidebarFooter()
-            }
-            .navigationSplitViewColumnWidth(190)
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            SettingsSidebarView(selectedTab: $navigation.selectedTab)
+                .frame(width: 200)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 200)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
-            settingsDetail(for: activeTab)
-                .settingsDetailTopAligned()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            SettingsDetailView(tab: activeTab, dependencies: dependencies)
         }
+        .navigationTitle("Settings")
         .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
-        .background(SettingsWindowConfigurator())
-        .frame(width: 760, height: 640)
-    }
+        .frame(minWidth: 720, minHeight: 560)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Button {
+                    goBack()
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .disabled(!canGoBack)
 
-    @ViewBuilder
-    private func settingsDetail(for tab: SettingsTab) -> some View {
-        switch tab {
-        case .general:
-            GeneralSettingsView(
-                whisperModelManager: whisperModelManager,
-                parakeetModelManager: parakeetModelManager
-            )
-        case .controls:
-            ControlsSettingsView()
-        case .output:
-            OutputSettingsView()
-        case .vocabulary:
-            VocabularySettingsView(customWordsManager: customWordsManager)
-        case .stats:
-            StatsSettingsView(historyManager: historyManager)
-        case .history:
-            HistorySettingsView(historyManager: historyManager)
-        case .debug:
-            DebugSettingsView(restartOnboarding: restartOnboarding)
-        case .about:
-            AboutSettingsView(updaterManager: updaterManager)
+                Button {
+                    goForward()
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .disabled(!canGoForward)
+            }
+        }
+        .onChange(of: navigation.selectedTab) { _, _ in
+            recordNavigation()
         }
     }
-}
 
-private struct SettingsDetailTopAlignment: ViewModifier {
-    // NavigationSplitView keeps the detail column below the titlebar while the sidebar extends into it.
-    private let titlebarCompensation: CGFloat = 52
+    // MARK: - Navigation History
 
-    func body(content: Content) -> some View {
-        content
-            .offset(y: -titlebarCompensation)
-            .padding(.bottom, -titlebarCompensation)
+    private var canGoBack: Bool {
+        historyIndex > 0
+    }
+
+    private var canGoForward: Bool {
+        historyIndex < navigationHistory.count - 1
+    }
+
+    private func goBack() {
+        guard canGoBack else { return }
+        isHistoryNavigation = true
+        historyIndex -= 1
+        navigation.selectedTab = navigationHistory[historyIndex]
+        DispatchQueue.main.async { isHistoryNavigation = false }
+    }
+
+    private func goForward() {
+        guard canGoForward else { return }
+        isHistoryNavigation = true
+        historyIndex += 1
+        navigation.selectedTab = navigationHistory[historyIndex]
+        DispatchQueue.main.async { isHistoryNavigation = false }
+    }
+
+    private func recordNavigation() {
+        guard !isHistoryNavigation else { return }
+        guard let tab = navigation.selectedTab else { return }
+        if navigationHistory.last == tab { return }
+        if historyIndex < navigationHistory.count - 1 {
+            navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))
+        }
+        navigationHistory.append(tab)
+        historyIndex = navigationHistory.count - 1
     }
 }
 
-private extension View {
-    func settingsDetailTopAligned() -> some View {
-        modifier(SettingsDetailTopAlignment())
+// MARK: - Sidebar
+
+private struct SettingsSidebarView: View {
+    @Binding var selectedTab: SettingsTab?
+
+    var body: some View {
+        List(selection: $selectedTab) {
+            ForEach(SettingsTab.allCases) { tab in
+                SettingsSidebarRow(tab: tab)
+                    .tag(tab)
+            }
+
+            SettingsSidebarFooter()
+        }
+        .listStyle(.sidebar)
+        .scrollEdgeEffectStyleSoftIfAvailable()
+        .navigationTitle("Settings")
     }
 }
 
@@ -160,80 +166,74 @@ private struct SettingsSidebarRow: View {
         Label {
             Text(tab.title)
         } icon: {
-            Group {
-                Image(systemName: tab.icon)
-            }
-            .frame(width: 18)
+            Image(systemName: tab.icon)
         }
+        .foregroundStyle(.primary)
     }
 }
 
 private struct SettingsSidebarFooter: View {
     var body: some View {
         Text(AppVersion.displayString)
-            .font(.caption2)
+            .font(.footnote)
             .foregroundStyle(.tertiary)
+            .fontDesign(.monospaced)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 6, trailing: 0))
     }
 }
 
-private struct SettingsWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            configure(window: view.window)
-        }
-        return view
-    }
+// MARK: - Detail
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            configure(window: nsView.window)
-        }
-    }
+private struct SettingsDetailView: View {
+    let tab: SettingsTab
+    let dependencies: SettingsWindowController.Dependencies?
 
-    private func configure(window: NSWindow?) {
-        guard let window else { return }
-        window.title = "Settings"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.styleMask.insert(.fullSizeContentView)
-        window.isMovableByWindowBackground = true
-        removeSidebarToggleWhenAvailable(from: window)
-    }
-
-    private func removeSidebarToggleWhenAvailable(from window: NSWindow) {
-        removeSidebarToggle(from: window)
-
-        for delay in [0.0, 0.05, 0.15, 0.35, 0.75] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                removeSidebarToggle(from: window)
+    var body: some View {
+        Group {
+            if let dependencies {
+                switch tab {
+                case .general:
+                    GeneralSettingsView(
+                        whisperModelManager: dependencies.whisperModelManager,
+                        parakeetModelManager: dependencies.parakeetModelManager
+                    )
+                case .controls:
+                    ControlsSettingsView()
+                case .output:
+                    OutputSettingsView()
+                case .vocabulary:
+                    VocabularySettingsView(customWordsManager: dependencies.customWordsManager)
+                case .stats:
+                    StatsSettingsView(historyManager: dependencies.historyManager)
+                case .history:
+                    HistorySettingsView(historyManager: dependencies.historyManager)
+                case .debug:
+                    DebugSettingsView(restartOnboarding: dependencies.restartOnboarding)
+                case .about:
+                    AboutSettingsView(updaterManager: dependencies.updaterManager)
+                }
+            } else {
+                Color.clear
             }
         }
+        .navigationTitle(tab.title)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
 
-    private func removeSidebarToggle(from window: NSWindow) {
-        guard let toolbar = window.toolbar else { return }
+// MARK: - macOS 26 Availability Helpers
 
-        for index in toolbar.items.indices.reversed() {
-            let item = toolbar.items[index]
-            let searchableText = [
-                item.itemIdentifier.rawValue,
-                item.label,
-                item.paletteLabel,
-                item.toolTip,
-                item.view?.accessibilityLabel(),
-                item.view?.accessibilityHelp()
-            ]
-            .compactMap { $0 }
-            .joined(separator: " ")
-            .lowercased()
-
-            if searchableText.contains("sidebar") {
-                toolbar.removeItem(at: index)
-            }
+extension View {
+    @ViewBuilder
+    func scrollEdgeEffectStyleSoftIfAvailable() -> some View {
+        if #available(macOS 26.0, *) {
+            scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            self
         }
     }
 }
@@ -337,6 +337,7 @@ private struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .contentMargins(.top, 8, for: .scrollContent)
         .onDisappear {
             audioDeviceObserver.stop()
@@ -651,6 +652,7 @@ private struct ControlsSettingsView: View {
 
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .contentMargins(.top, 8, for: .scrollContent)
         .onDisappear {
             hotkeyRecorder.stop()
@@ -666,54 +668,20 @@ private struct ControlsSettingsView: View {
 }
 
 private struct OutputSettingsView: View {
-    @AppStorage(AppPreferenceKey.transcriptionEngine) private var engineRaw = TranscriptionEngine.dictation.rawValue
     @AppStorage(AppPreferenceKey.appendTrailingSpace) private var appendTrailingSpace = false
     @AppStorage(AppPreferenceKey.removeFillerWords) private var removeFillerWords = false
     @AppStorage(AppPreferenceKey.smartFormattingEnabled) private var smartFormattingEnabled = false
-    @AppStorage(AppPreferenceKey.smartFormattingBackend) private var formattingBackendRaw = FormattingBackend.appleIntelligence.rawValue
-    @AppStorage(AppPreferenceKey.enhancementMode) private var enhancementModeRaw = EnhancementMode.off.rawValue
-    @AppStorage(AppPreferenceKey.enhancementSystemPrompt) private var systemPrompt = AppPreferenceKey.defaultEnhancementPrompt
     @AppStorage(AppPreferenceKey.cloudAIProvider) private var cloudProviderRaw = CloudAIProvider.openAI.rawValue
     @AppStorage(AppPreferenceKey.cloudAIModel) private var cloudModelID = CloudAIProvider.openAI.defaultModel.id
     @State private var apiKeyInput = ""
     @State private var apiKeySaved = false
 
-    private var selectedEngine: TranscriptionEngine {
-        TranscriptionEngine(rawValue: engineRaw) ?? .dictation
-    }
-
-    private var selectedEnhancementMode: EnhancementMode {
-        EnhancementMode(rawValue: enhancementModeRaw) ?? .off
-    }
-
     private var selectedCloudProvider: CloudAIProvider {
         CloudAIProvider(rawValue: cloudProviderRaw) ?? .openAI
     }
 
-    private var textEnhancementAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextEnhancer.isAvailable
-        }
-        return false
-    }
-
-    private var smartFormattingAppleIntelligenceAvailable: Bool {
-        if #available(macOS 26.0, *) {
-            return TextFormatter.isAvailable
-        }
-        return false
-    }
-
     private var cloudAIConfigured: Bool {
         KeychainManager.hasAPIKey(for: selectedCloudProvider)
-    }
-
-    private var smartFormattingAvailable: Bool {
-        let backend = FormattingBackend(rawValue: formattingBackendRaw) ?? .appleIntelligence
-        switch backend {
-        case .appleIntelligence: return smartFormattingAppleIntelligenceAvailable
-        case .cloudAI: return cloudAIConfigured
-        }
     }
 
     var body: some View {
@@ -754,7 +722,7 @@ private struct OutputSettingsView: View {
                                 .foregroundStyle(.orange)
                         }
 
-                        Text("Uses AI to add line breaks, paragraphs, bullets, and numbered lists from spoken cues.")
+                        Text("Uses Cloud AI to add higher-level structure, punctuation, and spoken formatting cues.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -762,49 +730,20 @@ private struct OutputSettingsView: View {
                 .toggleStyle(.switch)
 
                 if smartFormattingEnabled {
-                    Picker("Formatting backend", selection: $formattingBackendRaw) {
-                        ForEach(FormattingBackend.allCases) { backend in
-                            Text(backend.title).tag(backend.rawValue)
-                        }
-                    }
+                    Label("Sends each transcript directly to your selected AI provider for formatting.", systemImage: "network")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                    if !smartFormattingAvailable {
-                        let backend = FormattingBackend(rawValue: formattingBackendRaw) ?? .appleIntelligence
-                        if backend == .appleIntelligence {
-                            Label("Requires macOS 26 with Apple Intelligence enabled.", systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Label("Configure your Cloud AI provider and API key below.", systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    if !cloudAIConfigured {
+                        Label("Add your provider API key below.", systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            Section("Text Enhancement") {
-                Picker("Mode", selection: $enhancementModeRaw) {
-                    Text(EnhancementMode.off.title).tag(EnhancementMode.off.rawValue)
-                    Text(EnhancementMode.appleIntelligence.title)
-                        .tag(EnhancementMode.appleIntelligence.rawValue)
-                    Text(EnhancementMode.cloudAI.title)
-                        .tag(EnhancementMode.cloudAI.rawValue)
-                }
-
-                if selectedEnhancementMode == .appleIntelligence {
-                    if !textEnhancementAvailable {
-                        Label("Apple Intelligence is not available on this Mac.", systemImage: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if selectedEngine != .dictation {
-                        Label("Apple Intelligence enhancement is only available with Direct Dictation. Use Cloud AI for Whisper/Parakeet.", systemImage: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if selectedEnhancementMode == .cloudAI || smartFormattingBackendUsesCloudAI {
+            if smartFormattingEnabled {
+                Section("Cloud AI") {
                     Picker("Provider", selection: Binding(
                         get: { cloudProviderRaw },
                         set: { newValue in
@@ -820,7 +759,7 @@ private struct OutputSettingsView: View {
                         }
                     }
 
-                    Picker("Model", selection: $cloudModelID) {
+                    Picker("Model", selection: cloudModelBinding) {
                         ForEach(selectedCloudProvider.models) { model in
                             Text(model.title).tag(model.id)
                         }
@@ -868,52 +807,27 @@ private struct OutputSettingsView: View {
                         }
                     }
                 }
-
-                if (selectedEnhancementMode == .appleIntelligence && selectedEngine == .dictation)
-                    || selectedEnhancementMode == .cloudAI {
-                    LabeledContent("System prompt") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextEditor(text: $systemPrompt)
-                                .font(.system(size: 11, design: .monospaced))
-                                .frame(height: 96)
-                                .scrollContentBackground(.hidden)
-                                .padding(6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(.quaternary.opacity(0.5))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .strokeBorder(.quaternary, lineWidth: 1)
-                                )
-
-                            HStack {
-                                Text("Customise how AI enhances your transcriptions.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Button("Reset to Default") {
-                                    systemPrompt = AppPreferenceKey.defaultEnhancementPrompt
-                                }
-                                .controlSize(.small)
-                                .disabled(systemPrompt == AppPreferenceKey.defaultEnhancementPrompt)
-                            }
-                        }
-                    }
-                }
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .contentMargins(.top, 8, for: .scrollContent)
         .onAppear {
+            cloudModelID = selectedCloudProvider.supportedModelID(from: cloudModelID)
             apiKeyInput = KeychainManager.getAPIKey(for: selectedCloudProvider) ?? ""
             apiKeySaved = !apiKeyInput.isEmpty
         }
     }
 
-    private var smartFormattingBackendUsesCloudAI: Bool {
-        smartFormattingEnabled
-            && (FormattingBackend(rawValue: formattingBackendRaw) ?? .appleIntelligence) == .cloudAI
+    private var cloudModelBinding: Binding<String> {
+        Binding(
+            get: {
+                selectedCloudProvider.supportedModelID(from: cloudModelID)
+            },
+            set: { newValue in
+                cloudModelID = selectedCloudProvider.supportedModelID(from: newValue)
+            }
+        )
     }
 }
 
@@ -1024,6 +938,8 @@ private struct StatsSettingsView: View {
                     .padding(.bottom, 20)
             }
         }
+        .scrollContentBackground(.hidden)
+        .scrollEdgeEffectStyleSoftIfAvailable()
         .contentMargins(.top, 8, for: .scrollContent)
     }
 
@@ -1325,6 +1241,7 @@ private struct HistorySettingsView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 4)
                 }
+                .scrollEdgeEffectStyleSoftIfAvailable()
             }
         }
     }
@@ -1348,7 +1265,7 @@ private struct HistorySettingsView: View {
                         .foregroundStyle(.tertiary)
 
                     if record.wasEnhanced {
-                        Text("Enhanced")
+                        Text("Formatted")
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -1458,6 +1375,7 @@ private struct VocabularySettingsView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 4)
                 }
+                .scrollEdgeEffectStyleSoftIfAvailable()
 
                 Divider()
 
@@ -1521,6 +1439,7 @@ private struct DebugSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .contentMargins(.top, 8, for: .scrollContent)
     }
 }
@@ -1661,6 +1580,7 @@ private struct AboutSettingsView: View {
             .padding(.vertical, 24)
             .frame(maxWidth: 520, alignment: .leading)
         }
+        .scrollEdgeEffectStyleSoftIfAvailable()
         .contentMargins(.top, 8, for: .scrollContent)
         .task {
             await loadAvatar()
