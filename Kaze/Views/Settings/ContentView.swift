@@ -204,7 +204,10 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
-        window.isMovableByWindowBackground = true
+        // The detail view is intentionally aligned into the transparent titlebar
+        // area. Let controls in that area receive clicks instead of treating them
+        // as draggable window background.
+        window.isMovableByWindowBackground = false
         removeSidebarToggleWhenAvailable(from: window)
     }
 
@@ -1541,7 +1544,13 @@ private struct VocabularySettingsView: View {
         guard !trimmed.isEmpty else { return }
         customWordsManager.addWord(trimmed)
         newWord = ""
-        isInputFocused = true
+
+        // Let the button/text-field event finish before restoring focus. On macOS,
+        // doing this synchronously after a button click can leave the field unable
+        // to accept the next word once the first list item appears.
+        DispatchQueue.main.async {
+            isInputFocused = true
+        }
     }
 
     private func wordRow(_ word: String, at index: Int) -> some View {

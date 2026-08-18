@@ -443,7 +443,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.title = "Settings"
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
+            // Keep controls aligned beneath the transparent titlebar clickable.
+            window.isMovableByWindowBackground = false
             window.contentViewController = hostingController
             window.isReleasedWhenClosed = false
             window.delegate = self
