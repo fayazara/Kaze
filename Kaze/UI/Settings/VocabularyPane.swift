@@ -5,13 +5,17 @@ struct VocabularyPane: View {
     @State private var newWord = ""
     @State private var find = ""
     @State private var replace = ""
+    @FocusState private var focus: Field?
     @Namespace private var chips
+
+    private enum Field { case word, find, replace }
 
     var body: some View {
         SettingsPage {
             Section {
                 HStack(spacing: 8) {
                     InsetField(prompt: "Add a name, product or term", text: $newWord, onSubmit: addWord)
+                        .focused($focus, equals: .word)
                     GlassIconButton(systemImage: "plus", help: "Add word", size: 30, action: addWord)
                         .disabled(newWord.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -37,10 +41,12 @@ struct VocabularyPane: View {
             Section {
                 HStack(spacing: 8) {
                     InsetField(prompt: "When Kaze hears…", text: $find, onSubmit: addReplacement)
+                        .focused($focus, equals: .find)
                     Image(systemName: "arrow.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                     InsetField(prompt: "…write", text: $replace, onSubmit: addReplacement)
+                        .focused($focus, equals: .replace)
                     GlassIconButton(systemImage: "plus", help: "Add replacement", size: 30, action: addReplacement)
                         .disabled(find.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -59,12 +65,22 @@ struct VocabularyPane: View {
     private func addWord() {
         app.vocabulary.addWord(newWord)
         newWord = ""
+        refocus(.word)
     }
 
     private func addReplacement() {
+        guard !find.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         app.vocabulary.addReplacement(find: find, replace: replace)
         find = ""
         replace = ""
+        refocus(.find)
+    }
+
+    /// Ready for the next entry. Deferred a runloop tick: set synchronously
+    /// inside a button action, macOS can drop focus again as the click ends.
+    /// (From PR #11 by @luanmdang.)
+    private func refocus(_ field: Field) {
+        DispatchQueue.main.async { focus = field }
     }
 }
 

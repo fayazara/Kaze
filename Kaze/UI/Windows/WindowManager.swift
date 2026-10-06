@@ -37,7 +37,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.remove(.resizable)
-            window.isMovableByWindowBackground = true
+            // Dragging by background would swallow clicks meant for the
+            // practice text box and shortcut recorder; the top bar still drags.
+            window.isMovableByWindowBackground = false
             window.standardWindowButton(.zoomButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             onboardingWindow = window
