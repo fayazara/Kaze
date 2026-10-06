@@ -9,15 +9,52 @@
 
     <!--
       HOW TO ADD A NEW RELEASE:
-      1. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in Xcode
-      2. Build your .dmg
-      3. Run: sign_update /path/to/Kaze.dmg
-         (tool is at ~/Library/Developer/Xcode/DerivedData/Kaze-*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update)
-      4. Copy a new <item> block below, fill in version, signature, length, and download URL
-      5. Commit appcast.xml to main, then create the GitHub Release with the .dmg
+      1. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in Xcode.
+      2. Export Kaze.app to ~/Downloads.
+      3. Run: go run ./cmd/kaze-release
+         - Enter release notes when prompted, or run non-interactively with
+           flags, e.g.:
+             go run ./cmd/kaze-release -yes \
+               -notes "Fixed pixelate preview
+             Improved upload flow"
+           (-notes-file <path> reads bullets from a file instead.)
+
+      The release tool creates Kaze.dmg, signs it with Sparkle, prepends
+      this appcast, commits/pushes appcast.xml to main, and creates the GitHub
+      release with the DMG attached.
 
       Newest release goes on top.
     -->
+
+    <item>
+      <title>Version 1.0</title>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <pubDate>Tue, 06 Oct 2026 22:04:39 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 1.0</h2>
+        <ul>
+          <li>Kaze 1.0 is a ground-up rebuild. Hold a key, speak, and clean text lands wherever your cursor is. Everything runs on your Mac.</li>
+          <li>New speech engines: Apple's SpeechAnalyzer shows your words live with nothing to download, NVIDIA Parakeet v2 is the fastest and most accurate for English (v3 covers 25 languages), and OpenAI Whisper covers 99 languages.</li>
+          <li>Clean Up (optional): S1-mini by Superwhisper runs locally to remove filler words and false starts, keep your corrections ("Friday, no wait, Thursday" becomes Thursday), and write numbers, dates, emails and lists properly. No cloud, no API keys.</li>
+          <li>Hold or tap: hold the shortcut to talk, or tap it once to go hands-free and tap again to finish. The default shortcut is fn, and esc cancels at any time.</li>
+          <li>A new notch island grows out of the notch with a live waveform, shows what Kaze is doing, and tells you which app your text went into.</li>
+          <li>Redesigned onboarding and Settings with Liquid Glass controls, plus a live preview of every Clean Up style.</li>
+          <li>More reliable: the shortcut recovers if macOS disables it, your last syllable is no longer clipped, silence is ignored instead of pasted, your clipboard is restored after pasting, and Zoom's virtual microphone is skipped.</li>
+          <li>Vocabulary: teach Apple Speech and Whisper names and jargon, and add find-and-replace rules applied to every dictation.</li>
+          <li>History with search, one-click copy, words per minute and time saved.</li>
+          <li>Thanks to @luanmdang for fixing vocabulary input focus and click handling (#11).</li>
+          <li>Heads up: settings start fresh in 1.0, so you'll see a short setup again. The old cloud formatting and API keys are gone; Clean Up replaces them on-device.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v1.0/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="C6cFu9/RkFtDKi3qeumxmVvwbsLJTibX0UMQXubge96irJVfifBz45/CHDNWHAvbZ9K6SLb8SSqNMC8uZIBDBQ=="
+        length="35004794"
+      />
+    </item>
 
     <item>
       <title>Version 0.81</title>
