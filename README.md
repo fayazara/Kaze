@@ -1,106 +1,48 @@
 # Kaze
 
-Hold a global hotkey, speak, and the transcribed text is automatically pasted into whatever app you're using. Transcription runs locally on your Mac, with optional Smart Formatting through your own AI provider API key.
+Hold a key, speak, and Kaze types what you said into whatever app you're using. Everything runs on your Mac: no cloud, no account, and your voice never leaves the device.
 
 https://github.com/user-attachments/assets/8fde004a-e07a-45fc-ae3c-8f8a216873d3
 
 ## Download
 
-Grab the latest `.dmg` from [GitHub Releases](https://github.com/fayazara/Kaze/releases/latest).
+Grab the latest `.dmg` from [GitHub Releases](https://github.com/fayazara/Kaze/releases/latest). Requires macOS 26 on Apple silicon.
 
 ## How it works
 
-1. **Press your global hotkey** (default: `Option + Command`) to start recording.
-2. **Speak** while Kaze captures audio and shows a floating waveform overlay.
-3. **Stop recording** (release in Hold mode, or press again in Toggle mode).
-4. **Kaze pastes the transcription** into the focused app while preserving your clipboard.
+1. **Hold your shortcut** (default: `fn`) and talk. A small island grows out of the notch with a live waveform.
+2. **Let go.** Kaze transcribes, optionally cleans the text up, and pastes it where your cursor is. Your clipboard is restored afterwards.
 
-The app lives entirely in the menu bar with no Dock icon. On first launch, a guided onboarding wizard walks you through hotkey setup and engine selection.
+Prefer hands-free? **Tap** the shortcut once instead of holding it; Kaze keeps listening until you tap again. Press `esc` to cancel at any point.
 
-## Features
+```
+shortcut ─▶ microphone (16 kHz) ─▶ speech model ─▶ Clean Up (optional) ─▶ replacements ─▶ paste
+```
 
-### Transcription engines
+## Speech models
 
-> **Personal recommendation** -- use **Parakeet v3 (NVIDIA)** for the best overall results.
+| Model | By | Runs on | Best for |
+|---|---|---|---|
+| **Apple Speech** | Apple | SpeechAnalyzer, built into macOS | Zero setup; shows words live as you speak |
+| **Parakeet v2** | NVIDIA | Core ML on the Neural Engine ([FluidAudio](https://github.com/FluidInference/FluidAudio)) | Fastest and most accurate for English |
+| **Parakeet v3** | NVIDIA | Core ML on the Neural Engine | 25 European languages |
+| **Whisper** (Base, Small English, Large v3 Turbo) | OpenAI | Core ML ([WhisperKit](https://github.com/argmaxinc/WhisperKit)) | 99 languages |
 
-Kaze ships with **3 transcription engines**:
+## Clean Up
 
-| Engine | Framework | Notes |
-|---|---|---|
-| **Direct Dictation** | Apple `SFSpeechRecognizer` | Zero setup, real-time streaming, uses device locale |
-| **Whisper (OpenAI)** | [WhisperKit](https://github.com/argmaxinc/WhisperKit) | Local model variants: Tiny, Base, Small, Large v3 Turbo |
-| **Parakeet v3 (NVIDIA)** | [FluidAudio](https://github.com/FluidInference/FluidAudio) | Fast, high-accuracy English ASR (~600 MB CoreML model) |
+Optional post-processing with **S1-mini by Superwhisper**, a 0.6B-parameter model fine-tuned to turn raw speech into written text. It removes fillers and false starts, keeps the correction when you change your mind ("Friday, no wait, Thursday" → "Thursday"), and writes numbers, dates, times, currency and email addresses properly. Choose a style (Casual → Formal), allow bulleted lists, and get proper email layout in mail apps.
 
-### Model management
+It runs locally with [MLX](https://github.com/ml-explore/mlx-swift) on your Mac's GPU. The only network access is the one-time model download from Hugging Face. English only for now.
 
-- **One-click download/remove** in Settings -- view readiness status and model size on disk
-- **Cancel in-progress downloads** at any time
-- **Idle model unloading** -- models automatically free memory after 90 seconds of inactivity
-- **Graceful fallback** -- if a selected model is unavailable, Kaze falls back to Direct Dictation
+## Why Core ML for speech and MLX for Clean Up?
 
-### Recording overlay
+Speech models are encoder-heavy and run continuously, so Kaze runs them through **Core ML on the Neural Engine**: it's very fast (Parakeet transcribes a minute of audio in about half a second), sips power, and leaves the GPU free. S1-mini is a small language model generating text token by token, which is what **MLX** is built for, and it loads the published weights directly.
 
-- **Dynamic Island / notch mode** -- a recording indicator that extends from the MacBook notch at the top of the screen, with animated expand/collapse transitions
-- **Pill mode** -- traditional floating pill at the bottom-center of the screen
-- **Real-time waveform bars** driven by audio level
-- **Live scrolling transcription** text with leading fade mask
-- **Processing state** -- shimmer animation + spinner while model inference or smart formatting runs
+## Also
 
-### Smart Formatting
-
-- Post-process transcriptions with direct provider Cloud AI requests to add paragraphs, lists, punctuation, and spoken formatting cues
-- Supports OpenAI, Gemini, and Anthropic API keys stored in Keychain
-- Custom vocabulary words are injected into the formatting prompt for better accuracy
-
-### Global hotkey
-
-- **Configurable shortcut** with support for key + modifier and modifier-only combos
-- **Two modes**: Hold to Talk and Press to Toggle
-- Default: `Option + Command`
-- Visual shortcut recorder in both Settings and Onboarding
-
-### Microphone selection
-
-- Pick a specific audio input device or use the system default
-- Real-time device list updates when hardware is connected/disconnected
-- Selection persists across sessions and is validated on launch
-
-### Onboarding
-
-- **4-step guided setup** on first launch: Welcome, Hotkey configuration, Engine selection, and Completion summary
-- Preferences are saved automatically as you complete each step
-
-### Other features
-
-- **Custom vocabulary/keywords** -- add names, abbreviations, and domain terms to improve recognition across all engines
-- **Transcription history** -- persistent local history (latest 50 entries) with engine labels, "Formatted" badge, relative timestamps, and one-click copy
-- **Clipboard-safe auto-paste** -- saves and restores your clipboard contents around each paste
-- **Trailing space option** -- optionally append a space after each transcription
-- **Launch at login** -- start Kaze automatically when you log in
-- **About dialog** -- version info, links to GitHub and Releases
-- **Menu bar status indicator** -- icon dims when no model is loaded, animates during model loading
-
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| UI | **SwiftUI** + **AppKit** -- SwiftUI for Settings/Onboarding/Overlay views; AppKit for menu bar, floating panel, clipboard, and simulated key events |
-| Speech | **Apple Speech framework** (`SFSpeechRecognizer`) for real-time streaming dictation |
-| Whisper | [**WhisperKit**](https://github.com/argmaxinc/WhisperKit) for local OpenAI Whisper transcription |
-| Parakeet | [**FluidAudio**](https://github.com/FluidInference/FluidAudio) for Parakeet v3 CoreML runtime |
-| Smart Formatting | Direct HTTP requests to OpenAI, Gemini, or Anthropic |
-| Hotkey | **CGEvent** tap for low-level global hotkey detection |
-| Audio | **AVCaptureSession** + **Accelerate/vDSP** for microphone capture, format conversion, and resampling |
-| State | **Combine** for reactive state bridging between transcription engines and the UI |
-| Login item | **SMAppService** for launch-at-login registration |
-
-## Requirements
-
-- macOS 26.0+
-- Xcode 26+ (for building from source)
-- Accessibility permission (for global hotkey)
-- Microphone permission
-- Speech Recognition permission (used by Direct Dictation)
+- **Vocabulary**: custom words that bias Apple Speech and Whisper, plus find-and-replace rules applied to every dictation
+- **History**: recent dictations with search and one-click copy, plus words-per-minute and time-saved stats
+- **Microphone picker**, sounds, launch at login, Sparkle auto-updates
 
 ## Building from source
 
@@ -110,8 +52,17 @@ cd Kaze
 open Kaze.xcodeproj
 ```
 
-Build and run in Xcode. Dependencies ([WhisperKit](https://github.com/argmaxinc/WhisperKit) + [FluidAudio](https://github.com/FluidInference/FluidAudio)) are resolved automatically via Swift Package Manager.
+Build the `Kaze Dev` scheme (Debug, separate bundle ID) or `Kaze` (Release). Dependencies resolve through Swift Package Manager. The first build compiles MLX and takes a few minutes.
+
+Debug builds include a headless self-test:
+
+```bash
+"Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --model parakeetV2 --say "send the report by friday"
+"Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --format "so um send it friday no wait thursday"
+```
+
+Releases are cut with `go run ./cmd/kaze-release` (see `.agents/skills/release-kaze`).
 
 ## License
 
-MIT
+MIT. S1-mini is Apache 2.0 with a naming clause; see its [model card](https://huggingface.co/superwhisper/s1-mini).

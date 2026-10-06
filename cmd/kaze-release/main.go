@@ -1,0 +1,994 @@
+package main
+
+import (
+	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/xml"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// Release-note input and prompt behaviour can be supplied via flags so the
+// tool can run fully non-interactively (e.g. from an agent or CI). When no
+// notes flag is given it falls back to reading them from stdin.
+var (
+	notesFlag     string
+	notesFileFlag string
+	assumeYes     bool
+
+	// Build-phase flags (-build): archive, export with Developer ID, notarize
+	// and staple the app before packaging/publishing.
+	doBuild        bool
+	schemeFlag     string
+	setVersionFlag string
+	setBuildFlag   string
+	notaryProfile  string
+	doHomebrew     bool
+)
+
+const (
+	red    = "\033[0;31m"
+	green  = "\033[0;32m"
+	yellow = "\033[0;33m"
+	cyan   = "\033[0;36m"
+	bold   = "\033[1m"
+	reset  = "\033[0m"
+)
+
+func step(msg string)    { fmt.Printf("\n%s%s==> %s%s\n", cyan, bold, msg, reset) }
+func success(msg string) { fmt.Printf("%s  OK %s%s\n", green, msg, reset) }
+func warn(msg string)    { fmt.Printf("%s  WARN %s%s\n", yellow, msg, reset) }
+
+func fail(msg string) {
+	fmt.Printf("%s  ERROR %s%s\n", red, msg, reset)
+	os.Exit(1)
+}
+
+const (
+	appDisplayName = "Kaze"
+	githubRepo     = "fayazara/Kaze"
+	gitBranch      = "main"
+	minSystemVer   = "26.0"
+	dmgVolumeName  = "Kaze"
+	appName        = "Kaze.app"
+	dmgName        = "Kaze.dmg"
+	appcastFile    = "appcast.xml"
+	repoEnvVar     = "KAZE_REPO"
+	appcastURL     = "https://raw.githubusercontent.com/fayazara/Kaze/main/appcast.xml"
+
+	// Homebrew tap (cask) configuration.
+	tapRepo      = "fayazara/homebrew-tap"
+	caskRelPath  = "Casks/kaze.rb"
+	tapDirEnvVar = "KAZE_TAP_DIR"
+	bundleID     = "com.fayazahmed.Kaze"
+
+	// Build/notarize configuration (used with -build).
+	projectName     = "Kaze.xcodeproj"
+	releaseScheme   = "Kaze"
+	developmentTeam = "TB2S44TFQS"
+	archiveName     = "Kaze.xcarchive"
+)
+
+var derivedDataPrefixes = []string{
+	"Kaze-",
+}
+
+type Appcast struct {
+	XMLName xml.Name `xml:"rss"`
+	Version string   `xml:"version,attr"`
+	Channel Channel  `xml:"channel"`
+}
+
+type Channel struct {
+	Title    string `xml:"title"`
+	Link     string `xml:"link"`
+	Language string `xml:"language"`
+	Items    []Item `xml:"item"`
+}
+
+type Item struct {
+	Title              string    `xml:"title"`
+	Version            string    `xml:"http://www.andymatuschak.org/xml-namespaces/sparkle version"`
+	ShortVersionString string    `xml:"http://www.andymatuschak.org/xml-namespaces/sparkle shortVersionString"`
+	MinSystemVersion   string    `xml:"http://www.andymatuschak.org/xml-namespaces/sparkle minimumSystemVersion"`
+	PubDate            string    `xml:"pubDate"`
+	Description        string    `xml:"description"`
+	Enclosure          Enclosure `xml:"enclosure"`
+}
+
+type Enclosure struct {
+	URL         string `xml:"url,attr"`
+	Type        string `xml:"type,attr"`
+	EdSignature string `xml:"http://www.andymatuschak.org/xml-namespaces/sparkle edSignature,attr"`
+	Length      string `xml:"length,attr"`
+}
+
+func main() {
+	flag.StringVar(&notesFlag, "notes", "", "Release notes, one bullet per line. Skips the interactive prompt.")
+	flag.StringVar(&notesFileFlag, "notes-file", "", "Path to a file with release notes, one bullet per line. Skips the interactive prompt.")
+	flag.BoolVar(&assumeYes, "yes", false, "Assume \"yes\" for all confirmation prompts (non-interactive).")
+	flag.BoolVar(&assumeYes, "y", false, "Alias for -yes.")
+	flag.BoolVar(&doBuild, "build", false, "Archive, export (Developer ID), notarize and staple the app into ~/Downloads before releasing.")
+	flag.StringVar(&schemeFlag, "scheme", releaseScheme, "Xcode scheme to archive (with -build).")
+	flag.StringVar(&setVersionFlag, "set-version", "", "Set MARKETING_VERSION before archiving and commit it (with -build).")
+	flag.StringVar(&setBuildFlag, "set-build", "", "Set CURRENT_PROJECT_VERSION before archiving and commit it (with -build).")
+	flag.StringVar(&notaryProfile, "notary-profile", "kaze-notary", "notarytool keychain profile name (with -build).")
+	flag.BoolVar(&doHomebrew, "homebrew", false, "Also publish/update the Homebrew cask in "+tapRepo+".")
+	flag.Parse()
+
+	homeDir, _ := os.UserHomeDir()
+	appPath := filepath.Join(homeDir, "Downloads", appName)
+	dmgPath := filepath.Join(homeDir, "Downloads", dmgName)
+
+	repoDir := findRepoDir(homeDir)
+	appcastPath := filepath.Join(repoDir, appcastFile)
+
+	fmt.Printf("\n%s=======================================%s\n", bold, reset)
+	fmt.Printf("%s  %s Release Manager%s\n", bold, appDisplayName, reset)
+	fmt.Printf("%s=======================================%s\n", bold, reset)
+
+	step("Checking prerequisites...")
+
+	requireCommand("create-dmg", "Install with: brew install create-dmg")
+	requireCommand("gh", "Install with: brew install gh")
+	requireCommand("git", "")
+	requireCommand("plutil", "")
+
+	if doBuild {
+		requireCommand("xcodebuild", "")
+		requireCommand("xcrun", "")
+		requireCommand("ditto", "")
+	}
+
+	signUpdate := findSignUpdate(homeDir)
+	if signUpdate == "" && !doBuild {
+		fail("Sparkle sign_update not found in DerivedData. Build the project once first.")
+	}
+	success("All tools found")
+
+	if doBuild {
+		runBuildPhase(repoDir, homeDir, appPath)
+
+		// The archive populates DerivedData with Sparkle's artifacts, so
+		// sign_update is available now even if it wasn't before.
+		if signUpdate == "" {
+			signUpdate = findSignUpdate(homeDir)
+			if signUpdate == "" {
+				fail("Sparkle sign_update not found in DerivedData after archiving.")
+			}
+		}
+	}
+
+	step("Validating " + appPath + "...")
+
+	info, err := os.Stat(appPath)
+	if err != nil || !info.IsDir() {
+		fail(appName + " not found in ~/Downloads. Export it from Xcode first.")
+	}
+
+	plist := filepath.Join(appPath, "Contents", "Info.plist")
+	version, err := plistValue(plist, "CFBundleShortVersionString")
+	if err != nil {
+		fail("Could not read version from Info.plist")
+	}
+
+	build, err := plistValue(plist, "CFBundleVersion")
+	if err != nil {
+		fail("Could not read build number from Info.plist")
+	}
+
+	if feedURL, err := plistValue(plist, "SUFeedURL"); err != nil {
+		warn("SUFeedURL not found in Info.plist")
+	} else if feedURL != appcastURL {
+		warn("SUFeedURL is " + feedURL + ", expected " + appcastURL)
+	}
+
+	if _, err := plistValue(plist, "SUPublicEDKey"); err != nil {
+		warn("SUPublicEDKey not found in Info.plist")
+	}
+
+	fmt.Printf("  Version: %s%s%s  Build: %s%s%s\n", bold, version, reset, bold, build, reset)
+
+	existingData, _ := os.ReadFile(appcastPath)
+	if strings.Contains(string(existingData), "sparkle:version>"+build+"<") {
+		warn(fmt.Sprintf("Build %s already exists in appcast.xml", build))
+		if !confirm("Continue anyway?", false) {
+			os.Exit(0)
+		}
+	}
+
+	success("App validated")
+
+	notes, err := collectReleaseNotes()
+	if err != nil {
+		fail(err.Error())
+	}
+	if len(notes) == 0 {
+		fail("No release notes provided")
+	}
+
+	fmt.Printf("\n  %sRelease summary:%s\n", bold, reset)
+	fmt.Printf("  App:     %s\n", appDisplayName)
+	fmt.Printf("  Version: %s (build %s)\n", version, build)
+	fmt.Printf("  Tag:     v%s\n", version)
+	fmt.Println("  Notes:")
+	for _, n := range notes {
+		fmt.Printf("    - %s\n", n)
+	}
+	fmt.Println()
+
+	if !confirm("Proceed with release?", true) {
+		os.Exit(0)
+	}
+
+	step("Creating DMG...")
+
+	_ = os.Remove(dmgPath)
+	dmgArgs := []string{
+		"--volname", dmgVolumeName,
+		"--window-pos", "200", "120",
+		"--window-size", "600", "400",
+		"--icon-size", "100",
+		"--icon", appName, "150", "185",
+		"--app-drop-link", "450", "185",
+		dmgPath,
+		appPath,
+	}
+
+	out, err := runCmd("create-dmg", dmgArgs...)
+	if err != nil {
+		if _, statErr := os.Stat(dmgPath); statErr != nil {
+			fail(fmt.Sprintf("DMG creation failed: %s\n%s", err, out))
+		}
+	}
+
+	if _, err := os.Stat(dmgPath); err != nil {
+		fail("DMG creation failed: file not found")
+	}
+	success("DMG created at " + dmgPath)
+
+	step("Signing DMG with Sparkle...")
+
+	signOut, err := runCmd(signUpdate, dmgPath)
+	if err != nil {
+		fail(fmt.Sprintf("sign_update failed: %s\n%s", err, signOut))
+	}
+
+	signature, length := parseSparkleSignature(signOut)
+	success(fmt.Sprintf("Signed (length: %s bytes)", length))
+
+	// Release notes markdown (used by the GitHub release).
+	var mdNotes strings.Builder
+	mdNotes.WriteString("## What's New\n\n")
+	for _, n := range notes {
+		mdNotes.WriteString(fmt.Sprintf("- %s\n", n))
+	}
+
+	// Publishing order matters. We create the GitHub release (with the DMG)
+	// BEFORE touching the appcast, because the appcast points at the release's
+	// download URL -- doing it the other way round leaves a published appcast
+	// referencing a release that may not exist if a later step fails.
+	//
+	//   1. push local commits  (so the release tag includes the released source)
+	//   2. create/upload the GitHub release + DMG
+	//   3. update + push the appcast
+	//   4. update the Homebrew cask
+
+	step("Pushing commits to GitHub...")
+	if out, err := runCmdRetry(3, "git", "-C", repoDir, "push", "origin", gitBranch); err != nil {
+		fail("git push failed:\n" + out)
+	}
+	success("Pushed to " + gitBranch)
+
+	step("Creating GitHub release...")
+	releaseURL := createOrUpdateRelease("v"+version, dmgPath, mdNotes.String())
+	success("Release created")
+
+	step("Updating appcast.xml...")
+
+	appcastData, err := os.ReadFile(appcastPath)
+	if err != nil {
+		fail("Could not read appcast.xml: " + err.Error())
+	}
+
+	var appcast Appcast
+	if err := xml.Unmarshal(appcastData, &appcast); err != nil {
+		fail("Could not parse appcast.xml: " + err.Error())
+	}
+
+	pubDate := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 +0000")
+	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/%s", githubRepo, version, dmgName)
+
+	newItem := Item{
+		Title:              fmt.Sprintf("Version %s", version),
+		Version:            build,
+		ShortVersionString: version,
+		MinSystemVersion:   minSystemVer,
+		PubDate:            pubDate,
+		Description:        buildDescription(version, notes),
+		Enclosure: Enclosure{
+			URL:         downloadURL,
+			Type:        "application/octet-stream",
+			EdSignature: signature,
+			Length:      length,
+		},
+	}
+
+	// Prepend the new item, dropping any existing entry for the same build so
+	// re-running a release replaces rather than duplicates it.
+	allItems := make([]Item, 0, len(appcast.Channel.Items)+1)
+	allItems = append(allItems, newItem)
+	for _, it := range appcast.Channel.Items {
+		if it.Version == build {
+			continue
+		}
+		allItems = append(allItems, it)
+	}
+
+	if err := writeAppcast(appcastPath, allItems); err != nil {
+		fail("Could not write appcast.xml: " + err.Error())
+	}
+	success(fmt.Sprintf("Appcast updated with v%s", version))
+
+	step("Pushing appcast to GitHub...")
+
+	if _, err := runCmd("git", "-C", repoDir, "add", appcastFile); err != nil {
+		fail("git add failed: " + err.Error())
+	}
+
+	commitMsg := fmt.Sprintf("Release v%s appcast", version)
+	if out, err := runCmd("git", "-C", repoDir, "commit", "--only", appcastFile, "-m", commitMsg); err != nil {
+		if !strings.Contains(out, "nothing to commit") {
+			fail("git commit failed:\n" + out)
+		}
+		warn("Appcast already up to date; nothing to commit")
+	}
+
+	if out, err := runCmdRetry(3, "git", "-C", repoDir, "push", "origin", gitBranch); err != nil {
+		fail("git push failed:\n" + out)
+	}
+	success("Pushed to " + gitBranch)
+
+	if doHomebrew {
+		step("Updating Homebrew cask...")
+		if err := updateHomebrewCask(homeDir, version, dmgPath); err != nil {
+			warn("Homebrew cask not updated: " + err.Error())
+		} else {
+			success("Homebrew cask updated in " + tapRepo)
+		}
+	}
+
+	fmt.Printf("\n%s%s=======================================%s\n", green, bold, reset)
+	fmt.Printf("%s%s  Released %s v%s%s\n", green, bold, appDisplayName, version, reset)
+	fmt.Printf("%s%s  %s%s\n", green, bold, releaseURL, reset)
+	fmt.Printf("%s%s=======================================%s\n\n", green, bold, reset)
+}
+
+// updateHomebrewCask regenerates the cask with the new version and the DMG's
+// sha256, then commits and pushes it to the tap repo. Non-fatal: a missing or
+// unconfigured tap should never block a release.
+func updateHomebrewCask(homeDir, version, dmgPath string) error {
+	sum, err := sha256File(dmgPath)
+	if err != nil {
+		return fmt.Errorf("hashing DMG: %w", err)
+	}
+
+	tapDir, cleanup, err := resolveTapDir(homeDir)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	caskPath := filepath.Join(tapDir, caskRelPath)
+	if err := os.MkdirAll(filepath.Dir(caskPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(caskPath, []byte(renderCask(version, sum)), 0o644); err != nil {
+		return err
+	}
+
+	if out, err := runCmd("git", "-C", tapDir, "add", caskRelPath); err != nil {
+		return fmt.Errorf("git add: %s", out)
+	}
+
+	commitMsg := fmt.Sprintf("kaze %s", version)
+	if out, err := runCmd("git", "-C", tapDir, "commit", "-m", commitMsg); err != nil {
+		if strings.Contains(out, "nothing to commit") {
+			return nil
+		}
+		return fmt.Errorf("git commit: %s", out)
+	}
+
+	if out, err := runCmd("git", "-C", tapDir, "push"); err != nil {
+		return fmt.Errorf("git push: %s", out)
+	}
+	return nil
+}
+
+// resolveTapDir returns a working copy of the tap repo. It honours
+// KAZE_TAP_DIR (a local clone) or falls back to a temporary clone.
+func resolveTapDir(homeDir string) (string, func(), error) {
+	if dir := strings.TrimSpace(os.Getenv(tapDirEnvVar)); dir != "" {
+		if !fileExists(dir) {
+			return "", nil, fmt.Errorf("%s set but %s does not exist", tapDirEnvVar, dir)
+		}
+		_, _ = runCmd("git", "-C", dir, "pull", "--ff-only")
+		return dir, nil, nil
+	}
+
+	tmp, err := os.MkdirTemp("", "kaze-tap-")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(tmp) }
+
+	if out, err := runCmd("gh", "repo", "clone", tapRepo, tmp); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("clone %s failed (create it or set %s): %s", tapRepo, tapDirEnvVar, out)
+	}
+	return tmp, cleanup, nil
+}
+
+func renderCask(version, sha string) string {
+	return fmt.Sprintf(`cask "kaze" do
+  version "%s"
+  sha256 "%s"
+
+  url "https://github.com/%s/releases/download/v#{version}/%s"
+  name "Kaze"
+  desc "On-device dictation for macOS: hold a key, speak, and the text is pasted"
+  homepage "https://github.com/%s"
+
+  auto_updates true
+
+  app "%s"
+
+  zap trash: [
+    "~/Library/Preferences/%s.plist",
+    "~/Library/Containers/%s",
+  ]
+end
+`, version, sha, githubRepo, dmgName, githubRepo, appName, bundleID, bundleID)
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func findRepoDir(homeDir string) string {
+	if repoDir := strings.TrimSpace(os.Getenv(repoEnvVar)); repoDir != "" {
+		if fileExists(filepath.Join(repoDir, appcastFile)) {
+			return repoDir
+		}
+		fail(repoEnvVar + " is set, but appcast.xml was not found there.")
+	}
+
+	if cwd, err := os.Getwd(); err == nil {
+		for dir := cwd; ; dir = filepath.Dir(dir) {
+			if fileExists(filepath.Join(dir, appcastFile)) {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+		}
+	}
+
+	candidates := []string{
+		filepath.Join(homeDir, "Developer", "fayazara", "mac", "Kaze"),
+	}
+	for _, candidate := range candidates {
+		if fileExists(filepath.Join(candidate, appcastFile)) {
+			return candidate
+		}
+	}
+
+	fail("Could not find Kaze repo. Set " + repoEnvVar + " to the repo path.")
+	return ""
+}
+
+func findSignUpdate(homeDir string) string {
+	derivedData := filepath.Join(homeDir, "Library", "Developer", "Xcode", "DerivedData")
+	entries, err := os.ReadDir(derivedData)
+	if err != nil {
+		return ""
+	}
+
+	for _, prefix := range derivedDataPrefixes {
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), prefix) {
+				continue
+			}
+
+			candidate := filepath.Join(derivedData, entry.Name(),
+				"SourcePackages", "artifacts", "sparkle", "Sparkle", "bin", "sign_update")
+			if fileExists(candidate) {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+func requireCommand(name, installHint string) {
+	if commandExists(name) {
+		return
+	}
+
+	if installHint == "" {
+		fail(name + " not found")
+	}
+	fail(name + " not found. " + installHint)
+}
+
+func commandExists(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+func runCmd(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// runCmdRetry runs a command, retrying with backoff on failure. Intended for
+// flaky network operations (gh / git push) which can fail with transient
+// "connection reset by peer" errors.
+func runCmdRetry(attempts int, name string, args ...string) (string, error) {
+	var out string
+	var err error
+	for i := 1; i <= attempts; i++ {
+		if out, err = runCmd(name, args...); err == nil {
+			return out, nil
+		}
+		if i < attempts {
+			warn(fmt.Sprintf("attempt %d/%d failed, retrying in %ds...", i, attempts, i*2))
+			time.Sleep(time.Duration(i*2) * time.Second)
+		}
+	}
+	return out, err
+}
+
+// createOrUpdateRelease creates the GitHub release for tag with the DMG
+// attached. If the release already exists (a re-run after a partial failure),
+// it re-uploads the DMG instead of failing. Returns the release URL.
+func createOrUpdateRelease(tag, dmgPath, notesMarkdown string) string {
+	if releaseExists(tag) {
+		warn("Release " + tag + " already exists; re-uploading the DMG.")
+		if out, err := runCmdRetry(3, "gh", "release", "upload", tag, dmgPath, "--clobber", "--repo", githubRepo); err != nil {
+			fail("gh release upload failed:\n" + out)
+		}
+		return fmt.Sprintf("https://github.com/%s/releases/tag/%s", githubRepo, tag)
+	}
+
+	out, err := runCmdRetry(3, "gh", "release", "create",
+		tag, dmgPath,
+		"--repo", githubRepo,
+		"--title", tag,
+		"--notes", notesMarkdown,
+	)
+	if err != nil {
+		fail("gh release create failed:\n" + out)
+	}
+	return out
+}
+
+// releaseExists reports whether a GitHub release for tag exists. A clean "not
+// found" answers false immediately; an ambiguous failure (likely network) is
+// retried before deciding.
+func releaseExists(tag string) bool {
+	out, err := runCmd("gh", "release", "view", tag, "--repo", githubRepo)
+	if err == nil {
+		return true
+	}
+	if strings.Contains(strings.ToLower(out), "not found") {
+		return false
+	}
+	_, err = runCmdRetry(2, "gh", "release", "view", tag, "--repo", githubRepo)
+	return err == nil
+}
+
+func plistValue(plistPath, key string) (string, error) {
+	out, err := runCmd("plutil", "-extract", key, "raw", "-o", "-", plistPath)
+	if err != nil {
+		return "", fmt.Errorf("key %q not found", key)
+	}
+	return out, nil
+}
+
+func confirm(prompt string, defaultYes bool) bool {
+	if assumeYes {
+		fmt.Printf("  %s (auto-yes)\n", prompt)
+		return true
+	}
+
+	hint := "(Y/n)"
+	if !defaultYes {
+		hint = "(y/N)"
+	}
+	fmt.Printf("  %s %s ", prompt, hint)
+
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(strings.ToLower(line))
+	if line == "" {
+		return defaultYes
+	}
+	return line == "y" || line == "yes"
+}
+
+// collectReleaseNotes returns the release-note bullets from (in priority order)
+// the -notes-file flag, the -notes flag, or interactive stdin input.
+func collectReleaseNotes() ([]string, error) {
+	if notesFileFlag != "" {
+		data, err := os.ReadFile(notesFileFlag)
+		if err != nil {
+			return nil, fmt.Errorf("could not read notes file: %w", err)
+		}
+		step("Using release notes from " + notesFileFlag)
+		return parseNotes(string(data)), nil
+	}
+
+	if notesFlag != "" {
+		step("Using release notes from -notes flag")
+		return parseNotes(notesFlag), nil
+	}
+
+	step("Release notes (one bullet point per line, empty line to finish):")
+	fmt.Printf("  %sEnter your release notes below:%s\n", yellow, reset)
+
+	var notes []string
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			break
+		}
+		notes = append(notes, cleanNote(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("could not read release notes: %w", err)
+	}
+	return notes, nil
+}
+
+// parseNotes splits raw text into trimmed, non-empty bullet lines.
+func parseNotes(raw string) []string {
+	var notes []string
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		notes = append(notes, cleanNote(line))
+	}
+	return notes
+}
+
+// cleanNote strips a leading markdown-style bullet marker so callers can pass
+// either "Fixed a bug" or "- Fixed a bug".
+func cleanNote(line string) string {
+	line = strings.TrimSpace(line)
+	for _, prefix := range []string{"- ", "* ", "• "} {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return line
+}
+
+// runBuildPhase reproduces the Xcode GUI release flow on the command line:
+// optional version/build bump, archive, export with Developer ID, notarize via
+// notarytool, and staple. The notarized + stapled app is placed at appPath
+// (~/Downloads/Kaze.app) so the rest of the pipeline can package it.
+func runBuildPhase(repoDir, homeDir, appPath string) {
+	ensureXcodeDeveloperDir()
+
+	projectPath := filepath.Join(repoDir, projectName)
+
+	if setVersionFlag != "" || setBuildFlag != "" {
+		step("Setting version/build...")
+		if err := bumpVersion(projectPath, setVersionFlag, setBuildFlag); err != nil {
+			fail("Version bump failed: " + err.Error())
+		}
+		commitMsg := versionCommitMessage(setVersionFlag, setBuildFlag)
+		if _, err := runCmd("git", "-C", repoDir, "add", filepath.Join(projectName, "project.pbxproj")); err != nil {
+			fail("git add (version bump) failed: " + err.Error())
+		}
+		if out, err := runCmd("git", "-C", repoDir, "commit", "-m", commitMsg); err != nil {
+			if !strings.Contains(out, "nothing to commit") {
+				fail("git commit (version bump) failed:\n" + out)
+			}
+		}
+		success(commitMsg)
+	}
+
+	archivePath := filepath.Join(homeDir, "Downloads", archiveName)
+	_ = os.RemoveAll(archivePath)
+
+	step("Archiving " + schemeFlag + " (Release)... this can take a couple of minutes")
+	if out, err := runCmd("xcodebuild", "archive",
+		"-project", projectPath,
+		"-scheme", schemeFlag,
+		"-configuration", "Release",
+		"-destination", "generic/platform=macOS",
+		"-archivePath", archivePath,
+		"DEVELOPMENT_TEAM="+developmentTeam,
+	); err != nil {
+		fail("xcodebuild archive failed:\n" + lastLines(out, 40))
+	}
+	success("Archived")
+
+	step("Exporting with Developer ID...")
+	exportDir, err := os.MkdirTemp("", "kaze-export-")
+	if err != nil {
+		fail("Could not create export dir: " + err.Error())
+	}
+	defer os.RemoveAll(exportDir)
+
+	optsPath := filepath.Join(exportDir, "ExportOptions.plist")
+	if err := os.WriteFile(optsPath, []byte(exportOptionsPlist()), 0o644); err != nil {
+		fail("Could not write ExportOptions.plist: " + err.Error())
+	}
+
+	if out, err := runCmd("xcodebuild", "-exportArchive",
+		"-archivePath", archivePath,
+		"-exportOptionsPlist", optsPath,
+		"-exportPath", exportDir,
+	); err != nil {
+		fail("xcodebuild -exportArchive failed:\n" + lastLines(out, 40))
+	}
+
+	exportedApp := filepath.Join(exportDir, appName)
+	if !fileExists(exportedApp) {
+		fail("Exported app not found at " + exportedApp)
+	}
+	success("Exported")
+
+	step("Notarizing (waiting for Apple)... this can take a few minutes")
+	zipPath := filepath.Join(exportDir, "Kaze-notarize.zip")
+	if out, err := runCmd("ditto", "-c", "-k", "--keepParent", exportedApp, zipPath); err != nil {
+		fail("Zipping for notarization failed:\n" + out)
+	}
+
+	notaryOut, notaryErr := runCmd("xcrun", "notarytool", "submit", zipPath,
+		"--keychain-profile", notaryProfile,
+		"--wait")
+	if notaryErr != nil {
+		fail(fmt.Sprintf("notarytool submit failed (is the '%s' keychain profile set up?):\n%s", notaryProfile, notaryOut))
+	}
+	if !strings.Contains(notaryOut, "status: Accepted") {
+		fail("Notarization did not succeed:\n" + notaryOut + "\n\nInspect with: xcrun notarytool log <submission-id> --keychain-profile " + notaryProfile)
+	}
+	success("Notarized")
+
+	step("Stapling notarization ticket...")
+	if out, err := runCmd("xcrun", "stapler", "staple", exportedApp); err != nil {
+		fail("stapler failed:\n" + out)
+	}
+
+	_ = os.RemoveAll(appPath)
+	if out, err := runCmd("ditto", exportedApp, appPath); err != nil {
+		fail("Placing app in ~/Downloads failed:\n" + out)
+	}
+	success("Notarized app ready at " + appPath)
+}
+
+// ensureXcodeDeveloperDir makes sure xcodebuild/xcrun resolve to a full Xcode
+// install rather than the Command Line Tools. xcodebuild fails outright when
+// the active developer directory is /Library/Developer/CommandLineTools, so we
+// point DEVELOPER_DIR at Xcode for all child processes.
+func ensureXcodeDeveloperDir() {
+	if dir := os.Getenv("DEVELOPER_DIR"); strings.Contains(dir, "Xcode") && fileExists(dir) {
+		return
+	}
+
+	if out, err := runCmd("xcode-select", "-p"); err == nil && strings.Contains(out, "Xcode") {
+		os.Setenv("DEVELOPER_DIR", out)
+		return
+	}
+
+	const fallback = "/Applications/Xcode.app/Contents/Developer"
+	if fileExists(fallback) {
+		os.Setenv("DEVELOPER_DIR", fallback)
+		return
+	}
+
+	fail("Xcode not found. xcodebuild needs full Xcode (not Command Line Tools).\n" +
+		"Install Xcode, or run: sudo xcode-select -s /Applications/Xcode.app, or set DEVELOPER_DIR.")
+}
+
+// bumpVersion rewrites MARKETING_VERSION and/or CURRENT_PROJECT_VERSION in the
+// pbxproj (all build configurations).
+func bumpVersion(projectPath, version, build string) error {
+	pbxPath := filepath.Join(projectPath, "project.pbxproj")
+	data, err := os.ReadFile(pbxPath)
+	if err != nil {
+		return err
+	}
+	contents := string(data)
+
+	if version != "" {
+		re := regexp.MustCompile(`MARKETING_VERSION = [^;]+;`)
+		if !re.MatchString(contents) {
+			return fmt.Errorf("MARKETING_VERSION not found in pbxproj")
+		}
+		contents = re.ReplaceAllString(contents, "MARKETING_VERSION = "+version+";")
+	}
+	if build != "" {
+		re := regexp.MustCompile(`CURRENT_PROJECT_VERSION = [^;]+;`)
+		if !re.MatchString(contents) {
+			return fmt.Errorf("CURRENT_PROJECT_VERSION not found in pbxproj")
+		}
+		contents = re.ReplaceAllString(contents, "CURRENT_PROJECT_VERSION = "+build+";")
+	}
+
+	return os.WriteFile(pbxPath, []byte(contents), 0o644)
+}
+
+func versionCommitMessage(version, build string) string {
+	switch {
+	case version != "" && build != "":
+		return fmt.Sprintf("Bump version to %s (build %s)", version, build)
+	case version != "":
+		return fmt.Sprintf("Bump version to %s", version)
+	default:
+		return fmt.Sprintf("Bump build to %s", build)
+	}
+}
+
+func exportOptionsPlist() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>` + developmentTeam + `</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+</dict>
+</plist>
+`
+}
+
+// lastLines returns the trailing n lines of s, to keep xcodebuild's verbose
+// output readable on failure.
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+func parseSparkleSignature(output string) (string, string) {
+	sigRe := regexp.MustCompile(`sparkle:edSignature="([^"]+)"`)
+	lenRe := regexp.MustCompile(`length="([^"]+)"`)
+
+	sigMatch := sigRe.FindStringSubmatch(output)
+	lenMatch := lenRe.FindStringSubmatch(output)
+
+	if len(sigMatch) < 2 {
+		fail("Could not parse signature from sign_update output:\n" + output)
+	}
+	if len(lenMatch) < 2 {
+		fail("Could not parse length from sign_update output:\n" + output)
+	}
+
+	return sigMatch[1], lenMatch[1]
+}
+
+func buildDescription(version string, notes []string) string {
+	var htmlItems strings.Builder
+	for _, note := range notes {
+		htmlItems.WriteString(fmt.Sprintf("          <li>%s</li>\n", xmlEscapeText(note)))
+	}
+
+	return fmt.Sprintf("<![CDATA[\n        <h2>What's New in %s</h2>\n        <ul>\n%s        </ul>\n      ]]>",
+		xmlEscapeText(version), htmlItems.String())
+}
+
+func descriptionToCDATA(desc string) string {
+	trimmed := strings.TrimSpace(desc)
+	if strings.HasPrefix(trimmed, "<![CDATA[") {
+		return desc
+	}
+	return "<![CDATA[\n        " + trimmed + "\n      ]]>"
+}
+
+func writeAppcast(path string, items []Item) error {
+	var b strings.Builder
+
+	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+  xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Kaze Updates</title>
+    <link>https://raw.githubusercontent.com/fayazara/Kaze/main/appcast.xml</link>
+    <language>en</language>
+
+    <!--
+      HOW TO ADD A NEW RELEASE:
+      1. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in Xcode.
+      2. Export Kaze.app to ~/Downloads.
+      3. Run: go run ./cmd/kaze-release
+         - Enter release notes when prompted, or run non-interactively with
+           flags, e.g.:
+             go run ./cmd/kaze-release -yes \
+               -notes "Fixed pixelate preview
+             Improved upload flow"
+           (-notes-file <path> reads bullets from a file instead.)
+
+      The release tool creates Kaze.dmg, signs it with Sparkle, prepends
+      this appcast, commits/pushes appcast.xml to main, and creates the GitHub
+      release with the DMG attached.
+
+      Newest release goes on top.
+    -->
+`)
+
+	for _, item := range items {
+		desc := descriptionToCDATA(item.Description)
+
+		b.WriteString("\n    <item>\n")
+		b.WriteString(fmt.Sprintf("      <title>%s</title>\n", xmlEscapeText(item.Title)))
+		b.WriteString(fmt.Sprintf("      <sparkle:version>%s</sparkle:version>\n", xmlEscapeText(item.Version)))
+		b.WriteString(fmt.Sprintf("      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n", xmlEscapeText(item.ShortVersionString)))
+		b.WriteString(fmt.Sprintf("      <sparkle:minimumSystemVersion>%s</sparkle:minimumSystemVersion>\n", xmlEscapeText(item.MinSystemVersion)))
+		b.WriteString(fmt.Sprintf("      <pubDate>%s</pubDate>\n", xmlEscapeText(item.PubDate)))
+		b.WriteString(fmt.Sprintf("      <description>%s</description>\n", desc))
+		b.WriteString("      <enclosure\n")
+		b.WriteString(fmt.Sprintf("        url=\"%s\"\n", xmlEscapeAttr(item.Enclosure.URL)))
+		b.WriteString(fmt.Sprintf("        type=\"%s\"\n", xmlEscapeAttr(item.Enclosure.Type)))
+		b.WriteString(fmt.Sprintf("        sparkle:edSignature=\"%s\"\n", xmlEscapeAttr(item.Enclosure.EdSignature)))
+		b.WriteString(fmt.Sprintf("        length=\"%s\"\n", xmlEscapeAttr(item.Enclosure.Length)))
+		b.WriteString("      />\n")
+		b.WriteString("    </item>\n")
+	}
+
+	b.WriteString("\n  </channel>\n</rss>\n")
+	return os.WriteFile(path, []byte(b.String()), 0644)
+}
+
+func xmlEscapeText(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
+func xmlEscapeAttr(s string) string {
+	s = xmlEscapeText(s)
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	return s
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}

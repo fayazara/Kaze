@@ -10,6 +10,10 @@
 		31FLUID0022F4D76D200E96913 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 31FLUID0012F4D76D200E96913 /* FluidAudio */; };
 		31SPARKLE022F4D76D200E96913 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31SPARKLE012F4D76D200E96913 /* Sparkle */; };
 		31WHISPER022F4D76D200E96913 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31WHISPER012F4D76D200E96913 /* WhisperKit */; };
+		31MLXLLM022F4D76D200E96913 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXLLM012F4D76D200E96913 /* MLXLLM */; };
+		31MLXCMN022F4D76D200E96913 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXCMN012F4D76D200E96913 /* MLXLMCommon */; };
+		31TOKEN022F4D76D200E96913 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 31TOKEN012F4D76D200E96913 /* Tokenizers */; };
+		31MLXSW022F4D76D200E96913 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXSW012F4D76D200E96913 /* MLX */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +44,10 @@
 				31WHISPER022F4D76D200E96913 /* WhisperKit in Frameworks */,
 				31FLUID0022F4D76D200E96913 /* FluidAudio in Frameworks */,
 				31SPARKLE022F4D76D200E96913 /* Sparkle in Frameworks */,
+				31MLXLLM022F4D76D200E96913 /* MLXLLM in Frameworks */,
+				31MLXCMN022F4D76D200E96913 /* MLXLMCommon in Frameworks */,
+				31TOKEN022F4D76D200E96913 /* Tokenizers in Frameworks */,
+				31MLXSW022F4D76D200E96913 /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -105,6 +113,10 @@
 				31WHISPER012F4D76D200E96913 /* WhisperKit */,
 				31FLUID0012F4D76D200E96913 /* FluidAudio */,
 				31SPARKLE012F4D76D200E96913 /* Sparkle */,
+				31MLXLLM012F4D76D200E96913 /* MLXLLM */,
+				31MLXCMN012F4D76D200E96913 /* MLXLMCommon */,
+				31TOKEN012F4D76D200E96913 /* Tokenizers */,
+				31MLXSW012F4D76D200E96913 /* MLX */,
 			);
 			productName = Kaze;
 			productReference = 31F19CCD2F4D76D200E96913 /* Kaze Dev.app */;
@@ -141,6 +153,9 @@
 				31WHISPER002F4D76D200E96913 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				31FLUID0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				31MLXLM0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				31TOKEN0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "swift-transformers" */,
+				31MLXSW0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -364,7 +379,7 @@
 				CODE_SIGN_ENTITLEMENTS = Kaze/Kaze.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = TB2S44TFQS;
 				ENABLE_APP_SANDBOX = YES;
@@ -378,14 +393,15 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Kaze Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze needs microphone access to transcribe your speech.";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze listens only while you dictate, and transcribes on your Mac.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kaze uses on-device speech recognition to convert your voice to text.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.81;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.Kaze.dev;
 				PRODUCT_NAME = "Kaze Dev";
 				REGISTER_APP_GROUPS = YES;
@@ -407,7 +423,7 @@
 				CODE_SIGN_ENTITLEMENTS = Kaze/Kaze.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = TB2S44TFQS;
 				ENABLE_APP_SANDBOX = YES;
@@ -421,14 +437,15 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Kaze;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze needs microphone access to transcribe your speech.";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Kaze listens only while you dictate, and transcribes on your Mac.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kaze uses on-device speech recognition to convert your voice to text.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.81;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fayazahmed.Kaze;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -478,8 +495,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.17.5;
 			};
 		};
 		31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
@@ -495,7 +512,31 @@
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.15.0;
+				minimumVersion = 1.1.0;
+			};
+		};
+		31MLXLM0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.32.3;
+			};
+		};
+		31TOKEN0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.3.4;
+			};
+		};
+		31MLXSW0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.32.3;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -515,6 +556,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 31WHISPER002F4D76D200E96913 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
+		};
+		31MLXLLM012F4D76D200E96913 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31MLXLM0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		31MLXCMN012F4D76D200E96913 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31MLXLM0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		31TOKEN012F4D76D200E96913 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31TOKEN0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
+		};
+		31MLXSW012F4D76D200E96913 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31MLXSW0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
