@@ -80,7 +80,7 @@ struct OnboardingView: View {
         case .permissions:
             GlassCapsuleButton(title: app.permissions.allGranted ? "Continue" : "Skip for Now", isProminent: app.permissions.allGranted, morph: ("primary", glass)) { go(1) }
         case .cleanUp:
-            let skipping = app.models.formatterState == .notInstalled
+            let skipping = !(app.preferences.formattingEnabled && app.models.isCleanUpReady(app.preferences.cleanUpEngine))
             GlassCapsuleButton(title: skipping ? "Not Now" : "Continue", isProminent: !skipping, morph: ("primary", glass)) { go(1) }
         case .done:
             GlassCapsuleButton(title: "Start Dictating", isProminent: true, morph: ("primary", glass)) { onFinish() }
@@ -245,37 +245,76 @@ private struct CleanUpStep: View {
             VStack(spacing: 22) {
                 CleanUpDemo()
 
+                GlassSegmentedPicker(
+                    options: CleanUpEngine.allCases,
+                    selection: $prefs.cleanUpEngine,
+                    title: \.title,
+                    height: 28
+                )
+
                 GlassEffectContainer(spacing: 8) {
-                    switch app.models.formatterState {
-                    case .installed:
-                        GlassSegmentedPicker(
-                            options: [false, true],
-                            selection: $prefs.formattingEnabled,
-                            title: { $0 ? "On" : "Off" }
-                        )
-                    case .preparing, .checking:
-                        ProgressView().controlSize(.small)
-                    default:
-                        GlassProgressButton(
-                            title: "Get Clean Up · \(FormatterModel.downloadSize)",
-                            systemImage: "arrow.down",
-                            progress: { if case .downloading(let p) = app.models.formatterState { return p } else { return nil } }(),
-                            width: 220,
-                            height: 34,
-                            start: { app.models.downloadFormatter() },
-                            cancel: { app.models.cancelFormatterDownload() }
-                        )
-                    }
+                    engineControl
                 }
+                .motion(value: prefs.cleanUpEngine)
                 .motion(value: app.models.formatterState.isInstalled)
 
-                Text("\(FormatterModel.name) by \(FormatterModel.author) · \(app.models.diskUsageText(for: "formatter") ?? FormatterModel.downloadSize) · Runs on your Mac · English")
+                Text(creditLine)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .contentTransition(.opacity)
             }
             .frame(maxWidth: .infinity)
 
             Spacer(minLength: 0)
+        }
+    }
+}
+
+extension CleanUpStep {
+    @ViewBuilder
+    var engineControl: some View {
+        @Bindable var prefs = app.preferences
+        let onOff = GlassSegmentedPicker(options: [false, true], selection: $prefs.formattingEnabled, title: { $0 ? "On" : "Off" })
+        switch prefs.cleanUpEngine {
+        case .chatGPT:
+            switch app.models.chatGPT.status {
+            case .signedIn:
+                onOff
+            case .signingIn:
+                GlassCapsuleButton(title: "Waiting for browser…", height: 34) { app.models.chatGPT.cancelSignIn() }
+            case .signedOut, .failed:
+                GlassCapsuleButton(title: "Sign in with ChatGPT", isProminent: true, height: 34) { app.models.chatGPT.signIn() }
+            }
+        case .s1Mini:
+            switch app.models.formatterState {
+            case .installed:
+                onOff
+            case .preparing, .checking:
+                ProgressView().controlSize(.small)
+            default:
+                GlassProgressButton(
+                    title: "Get S1-mini · \(FormatterModel.downloadSize)",
+                    systemImage: "arrow.down",
+                    progress: { if case .downloading(let p) = app.models.formatterState { return p } else { return nil } }(),
+                    width: 220,
+                    height: 34,
+                    start: { app.models.downloadFormatter() },
+                    cancel: { app.models.cancelFormatterDownload() }
+                )
+            }
+        }
+    }
+
+    var creditLine: String {
+        switch app.preferences.cleanUpEngine {
+        case .chatGPT:
+            if case .failed(let message) = app.models.chatGPT.status { return message }
+            if let email = app.models.chatGPT.email, app.models.chatGPT.isSignedIn {
+                return "Signed in as \(email) · Uses your ChatGPT plan · Transcripts go to OpenAI, not saved to your history"
+            }
+            return "Uses your ChatGPT plan · Transcripts go to OpenAI, not saved to your history"
+        case .s1Mini:
+            return "\(FormatterModel.name) by \(FormatterModel.author) · \(app.models.diskUsageText(for: "formatter") ?? FormatterModel.downloadSize) · Uses up to 1.5 GB of memory while cleaning · English"
         }
     }
 }

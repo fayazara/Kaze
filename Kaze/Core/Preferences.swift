@@ -88,6 +88,9 @@ final class Preferences {
         static let activationMode = "v1.activationMode"
         static let microphoneID = "v1.microphoneID"
         static let formattingEnabled = "v1.formattingEnabled"
+        static let cleanUpEngine = "v1.cleanUpEngine"
+        static let chatGPTModel = "v1.chatGPTModel"
+        static let chatGPTReasoning = "v1.chatGPTReasoning"
         static let formatStyle = "v1.formatStyle"
         static let allowLists = "v1.allowLists"
         static let emailInMailApps = "v1.emailInMailApps"
@@ -109,6 +112,11 @@ final class Preferences {
     /// Capture device unique ID, or `nil` for the system default input.
     var microphoneID: String? { didSet { defaults.set(microphoneID, forKey: Key.microphoneID) } }
     var formattingEnabled: Bool { didSet { defaults.set(formattingEnabled, forKey: Key.formattingEnabled) } }
+    var cleanUpEngine: CleanUpEngine { didSet { defaults.set(cleanUpEngine.rawValue, forKey: Key.cleanUpEngine) } }
+    /// Model slug from the user's ChatGPT plan, or `nil` for the default.
+    var chatGPTModel: String? { didSet { defaults.set(chatGPTModel, forKey: Key.chatGPTModel) } }
+    /// Reasoning effort for ChatGPT Clean Up, or `nil` for the model's lightest.
+    var chatGPTReasoning: String? { didSet { defaults.set(chatGPTReasoning, forKey: Key.chatGPTReasoning) } }
     var formatStyle: FormatStyle { didSet { defaults.set(formatStyle.rawValue, forKey: Key.formatStyle) } }
     var allowLists: Bool { didSet { defaults.set(allowLists, forKey: Key.allowLists) } }
     var emailInMailApps: Bool { didSet { defaults.set(emailInMailApps, forKey: Key.emailInMailApps) } }
@@ -138,6 +146,10 @@ final class Preferences {
         activationMode = ActivationMode(rawValue: defaults.string(forKey: Key.activationMode) ?? "") ?? .automatic
         microphoneID = defaults.string(forKey: Key.microphoneID)
         formattingEnabled = defaults.bool(forKey: Key.formattingEnabled)
+        // On-device by default; ChatGPT only when the user opts in.
+        cleanUpEngine = CleanUpEngine(rawValue: defaults.string(forKey: Key.cleanUpEngine) ?? "") ?? .s1Mini
+        chatGPTModel = defaults.string(forKey: Key.chatGPTModel)
+        chatGPTReasoning = defaults.string(forKey: Key.chatGPTReasoning)
         formatStyle = FormatStyle(rawValue: defaults.string(forKey: Key.formatStyle) ?? "") ?? .semiFormal
         allowLists = defaults.bool(forKey: Key.allowLists)
         emailInMailApps = defaults.bool(forKey: Key.emailInMailApps)

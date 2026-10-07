@@ -23,8 +23,9 @@ final class S1MiniFormatter {
     private var unloadTask: Task<Void, Never>?
     private let log = Logger(subsystem: "com.fayazahmed.Kaze", category: "Formatter")
 
-    /// The model holds ~1.2 GB; release it after a stretch of no dictation.
-    private static let idleUnloadDelay: Duration = .seconds(15 * 60)
+    /// The model holds ~1.2 GB and reloads in under a second, so release it
+    /// soon after the last use. (ModelManager also frees it on memory pressure.)
+    private static let idleUnloadDelay: Duration = .seconds(3 * 60)
 
     private static let systemPrompt = "You are a text normalizer for speech-to-text transcripts. The input begins with a control line specifying the styling, structure, and context settings; clean the transcript to match those settings and output only the cleaned text."
 

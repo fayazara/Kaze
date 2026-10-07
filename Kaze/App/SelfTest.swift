@@ -20,6 +20,26 @@ enum SelfTest {
         }
         let models = AppModel.shared.models
 
+        if args.contains("--chatgpt-catalog") {
+            do {
+                let token = try await models.chatGPT.accessToken()
+                var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                let (data, _) = try await URLSession.shared.data(for: request)
+                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                for model in json?["models"] as? [[String: Any]] ?? [] {
+                    let levels = (model["supported_reasoning_levels"] as? [[String: Any]] ?? []).compactMap { $0["effort"] as? String }
+                    print("•", model["slug"] ?? "?", "| \(model["display_name"] ?? "")", "| visibility:", model["visibility"] ?? "", "| default:", model["default_reasoning_level"] ?? "-", "| levels:", levels.joined(separator: ","), "| verbosity:", model["support_verbosity"] ?? "-")
+                    for key in ["service_tiers", "additional_speed_tiers", "default_service_tier", "use_responses_lite", "prefer_websockets"] {
+                        print("    \(key):", String(describing: model[key] ?? "-").replacingOccurrences(of: "\n", with: " "))
+                    }
+                }
+            } catch {
+                print("catalog failed:", error)
+            }
+            return 0
+        }
+
         do {
             if let raw = value("--model"), let model = SpeechModel(rawValue: raw) {
                 try await ensureInstalled(model, models: models)
@@ -47,25 +67,64 @@ enum SelfTest {
             }
 
             if let text = value("--format") {
-                if !S1MiniFormatter.isInstalled {
+                let engine = CleanUpEngine(rawValue: value("--engine") ?? "") ?? .s1Mini
+                if engine == .s1Mini, !S1MiniFormatter.isInstalled {
                     print("downloading S1-mini…")
                     try await S1MiniFormatter.download { _ in }
                     models.refresh()
                 }
-                var started = Date()
-                try await models.formatter.prepare()
-                print("load: \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
-                for style in [FormatStyle.semiFormal, .casual] {
-                    started = Date()
-                    let output = try await models.formatter.format(text, style: style, allowLists: true, context: .general)
-                    print("format[\(style.rawValue)] \(String(format: "%.2f", Date().timeIntervalSince(started)))s: \(output)")
+                if engine == .chatGPT {
+                    print("chatgpt: \(models.chatGPT.status) \(models.chatGPT.email ?? "")")
                 }
+                // Debug-only overrides for comparing ChatGPT settings; the
+                // previous values are restored below.
+                let savedModel = Preferences.shared.chatGPTModel
+                let savedEffort = Preferences.shared.chatGPTReasoning
+                if let slug = value("--chatgpt-model") { Preferences.shared.chatGPTModel = slug }
+                if let effort = value("--effort") { Preferences.shared.chatGPTReasoning = effort == "lowest" ? nil : effort }
+                defer {
+                    Preferences.shared.chatGPTModel = savedModel
+                    Preferences.shared.chatGPTReasoning = savedEffort
+                }
+                let cleaner = models.cleaner(for: engine)
+                var started = Date()
+                try await cleaner.prepare()
+                print("load: \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
+                // Several inputs separated by "|" to compare engines in one run.
+                for input in text.split(separator: "|").map(String.init) {
+                    for style in [FormatStyle.semiFormal] {
+                        started = Date()
+                        do {
+                            let output = try await cleaner.format(input, style: style, allowLists: true, context: .general)
+                            let verdict = TextPolisher.isPlausibleRewrite(output, of: input) ? "" : "   [REJECTED by guard → raw transcript pasted]"
+                            print("[\(String(format: "%.2f", Date().timeIntervalSince(started)))s] \(input)\n   → \(output)\(verdict)")
+                        } catch {
+                            print("[error] \(input)\n   → \(error)")
+                        }
+                    }
+                }
+                print("footprint loaded: \(footprintMB()) MB")
+                cleaner.unload()
+                try? await Task.sleep(for: .seconds(1))
+                print("footprint after unload: \(footprintMB()) MB")
             }
             return 0
         } catch {
             print("SELFTEST FAILED: \(error)")
             return 1
         }
+    }
+
+    /// Physical memory footprint, the number Activity Monitor shows.
+    static func footprintMB() -> Int {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1
     }
 
     private static func ensureInstalled(_ model: SpeechModel, models: ModelManager) async throws {

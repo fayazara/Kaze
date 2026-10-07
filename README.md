@@ -1,6 +1,6 @@
 # Kaze
 
-Hold a key, speak, and Kaze types what you said into whatever app you're using. Everything runs on your Mac: no cloud, no account, and your voice never leaves the device.
+Hold a key, speak, and Kaze types what you said into whatever app you're using. Speech recognition always runs on your Mac and your voice never leaves it. The optional Clean Up runs on your Mac too, unless you choose to connect your ChatGPT plan.
 
 https://github.com/user-attachments/assets/8fde004a-e07a-45fc-ae3c-8f8a216873d3
 
@@ -30,9 +30,10 @@ shortcut ─▶ microphone (16 kHz) ─▶ speech model ─▶ Clean Up (optiona
 
 ## Clean Up
 
-Optional post-processing with **S1-mini by Superwhisper**, a 0.6B-parameter model fine-tuned to turn raw speech into written text. It removes fillers and false starts, keeps the correction when you change your mind ("Friday, no wait, Thursday" → "Thursday"), and writes numbers, dates, times, currency and email addresses properly. Choose a style (Casual → Formal), allow bulleted lists, and get proper email layout in mail apps.
+Optional post-processing that turns raw speech into written text: it removes fillers and false starts, keeps the correction when you change your mind ("Friday, no wait, Thursday" → "Thursday"), and writes numbers, dates, times, currency and email addresses properly. Choose a style (Casual → Formal), allow bulleted lists, and get proper email layout in mail apps. Two engines:
 
-It runs locally with [MLX](https://github.com/ml-explore/mlx-swift) on your Mac's GPU. The only network access is the one-time model download from Hugging Face. English only for now.
+- **S1-mini by Superwhisper** (default): a 0.6B-parameter model fine-tuned for exactly this, run locally with [MLX](https://github.com/ml-explore/mlx-swift). Nothing leaves your Mac; the only network access is the one-time 1.5 GB download from Hugging Face. It loads while you speak and is freed right after, using up to 1.5 GB of memory only while cleaning. English only.
+- **ChatGPT** (opt-in): Sign in with ChatGPT and Clean Up uses a model from your own ChatGPT plan (GPT-5.6-Luna by default, lowest thinking level). Your transcript is sent to OpenAI for that request with `store: false`, so it isn't saved to your ChatGPT history. No API key needed.
 
 ## Why Core ML for speech and MLX for Clean Up?
 

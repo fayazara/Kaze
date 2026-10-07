@@ -86,7 +86,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let cleanUp = NSMenuItem(title: "Clean Up", action: #selector(toggleCleanUp), keyEquivalent: "")
         cleanUp.target = self
         cleanUp.state = prefs.formattingEnabled ? .on : .off
-        cleanUp.isEnabled = app.models.formatterState.isInstalled
+        cleanUp.isEnabled = app.models.isCleanUpReady(prefs.cleanUpEngine)
         menu.addItem(cleanUp)
 
         menu.addItem(.separator())

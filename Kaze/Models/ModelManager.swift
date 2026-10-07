@@ -34,14 +34,41 @@ final class ModelManager {
     private(set) var lastWarmUpError: String?
 
     let formatter = S1MiniFormatter()
+    let chatGPT = ChatGPTAccount()
+    @ObservationIgnored private(set) lazy var chatGPTCleaner = ChatGPTCleaner(account: chatGPT)
+
+    func cleaner(for engine: CleanUpEngine) -> any TextCleaner {
+        switch engine {
+        case .chatGPT: chatGPTCleaner
+        case .s1Mini: formatter
+        }
+    }
+
+    /// Whether `engine` can run right now (downloaded / turned on).
+    func isCleanUpReady(_ engine: CleanUpEngine) -> Bool {
+        switch engine {
+        case .chatGPT: chatGPT.isSignedIn
+        case .s1Mini: formatterState.isInstalled
+        }
+    }
 
     @ObservationIgnored private var engines: [SpeechModel: any SpeechEngine] = [:]
+    @ObservationIgnored private var idleUnload: Task<Void, Never>?
+    @ObservationIgnored private var memoryPressure: DispatchSourceMemoryPressure?
+    /// A dictation is using the models; never unload underneath it.
+    @ObservationIgnored private var inUse = false
+
+    /// Models stay loaded this long after the last dictation. Reloading is
+    /// ~0.1 s once macOS has the Neural Engine build cached, so holding them
+    /// longer only costs memory.
+    private static let idleUnloadDelay: Duration = .seconds(3 * 60)
     @ObservationIgnored private var downloads: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let log = Logger(subsystem: "com.fayazahmed.Kaze", category: "Models")
 
     init() {
         for model in SpeechModel.allCases { speechStates[model] = .checking }
         refresh()
+        watchMemoryPressure()
     }
 
     func state(of model: SpeechModel) -> InstallState {
@@ -92,9 +119,13 @@ final class ModelManager {
         return engine
     }
 
-    /// Loads the chosen model ahead of time so the first dictation is instant,
-    /// and releases every other engine.
+    /// Loads `model` and releases every other engine. Used at launch to
+    /// prime macOS's Neural Engine compile cache (the slow part), and when a
+    /// dictation starts so the model loads while the user is speaking.
+    /// Unless a dictation is running, the model is freed again after
+    /// `idleUnloadDelay`.
     func warmUp(_ model: SpeechModel) {
+        idleUnload?.cancel()
         for (other, engine) in engines where other != model { engine.unload() }
         guard state(of: model).isInstalled else { return }
         warmingModel = model
@@ -107,7 +138,46 @@ final class ModelManager {
                 lastWarmUpError = error.localizedDescription
             }
             if warmingModel == model { warmingModel = nil }
+            if !inUse { scheduleIdleUnload() }
         }
+    }
+
+    /// A dictation started: keep everything loaded until it ends.
+    func beginUse(_ model: SpeechModel) {
+        inUse = true
+        warmUp(model)
+    }
+
+    /// The dictation ended: free memory once the user has been idle a while.
+    func endUse() {
+        inUse = false
+        scheduleIdleUnload()
+    }
+
+    private func scheduleIdleUnload() {
+        idleUnload?.cancel()
+        idleUnload = Task {
+            try? await Task.sleep(for: Self.idleUnloadDelay)
+            guard !Task.isCancelled, !inUse else { return }
+            unloadAll(reason: "idle")
+        }
+    }
+
+    private func unloadAll(reason: String) {
+        guard !inUse else { return }
+        for engine in engines.values { engine.unload() }
+        formatter.unload()
+        log.info("Unloaded models (\(reason, privacy: .public))")
+    }
+
+    /// Give memory back as soon as macOS asks for it.
+    private func watchMemoryPressure() {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.unloadAll(reason: "memory pressure") }
+        }
+        source.resume()
+        memoryPressure = source
     }
 
     // MARK: - Speech model downloads

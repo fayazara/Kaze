@@ -12,6 +12,8 @@ enum DictationPhase: Equatable {
     case formatting
     case done(pasted: Bool)
     case failed(String)
+    /// The recording had no speech in it. Shown wordlessly.
+    case nothingHeard
 
     var isActive: Bool {
         switch self {
@@ -106,7 +108,7 @@ final class DictationController {
         switch event {
         case .pressed:
             switch phase {
-            case .idle, .done, .failed:
+            case .idle, .done, .failed, .nothingHeard:
                 pressedAt = now
                 start(handsFree: preferences.activationMode == .toggle)
             case .listening(handsFree: true):
@@ -136,7 +138,7 @@ final class DictationController {
     func toggleFromUI() {
         switch phase {
         case .listening: stop()
-        case .idle, .done, .failed: start(handsFree: true)
+        case .idle, .done, .failed, .nothingHeard: start(handsFree: true)
         default: break
         }
     }
@@ -188,9 +190,12 @@ final class DictationController {
         hotkey.capturesEscape = true
         Sounds.play(.start, enabled: preferences.playSounds)
 
-        // Have the formatter loading while the user speaks.
+        // Load the models while the user speaks (~0.1 s once macOS has
+        // cached the Neural Engine build), and keep them until we're done.
+        models.beginUse(model)
         if shouldFormat {
-            Task { try? await models.formatter.prepare() }
+            let cleaner = models.cleaner(for: preferences.cleanUpEngine)
+            Task { try? await cleaner.prepare() }
         }
 
         recorder.onSamples = { samples in session.append(samples) }
@@ -239,7 +244,7 @@ final class DictationController {
             let duration = Double(audio.count) / AudioRecorder.sampleRate
             guard duration > 0.3, peak >= Self.speechLevelThreshold else {
                 session.cancel()
-                fail("Didn't catch that", quiet: true)
+                nothingHeard()
                 return
             }
 
@@ -273,12 +278,13 @@ final class DictationController {
         liveText = ""
         listeningSince = nil
         phase = .idle
+        models.endUse()
         if !silently { Sounds.play(.cancel, enabled: preferences.playSounds) }
     }
 
     private func deliver(raw: String, model: SpeechModel, duration: TimeInterval, stoppedAt: Date, generation: Int) async throws {
         guard !raw.isEmpty else {
-            fail("Didn't catch that", quiet: true)
+            nothingHeard()
             return
         }
 
@@ -286,7 +292,7 @@ final class DictationController {
         if shouldFormat {
             phase = .formatting
             let context: FormatContext = preferences.emailInMailApps && Self.isMailApp(targetApp) ? .email : .general
-            let formatter = models.formatter
+            let formatter = models.cleaner(for: preferences.cleanUpEngine)
             let style = preferences.formatStyle
             let allowLists = preferences.allowLists
             do {
@@ -304,12 +310,15 @@ final class DictationController {
                 guard self.generation == generation else { return }
                 log.error("Formatting failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
             }
+            // S1-mini holds ~1.4 GB and reloads in under a second while the
+            // next dictation is being spoken, so don't keep it around.
+            if preferences.cleanUpEngine == .s1Mini { models.formatter.unload() }
         }
 
         text = TextPolisher.applyReplacements(vocabulary.replacements, to: text)
         guard !text.isEmpty else {
             // The formatter returns nothing for filler-only speech ("um").
-            fail("Didn't catch that", quiet: true)
+            nothingHeard()
             return
         }
 
@@ -335,10 +344,22 @@ final class DictationController {
     }
 
     private var shouldFormat: Bool {
-        guard preferences.formattingEnabled, models.formatterState.isInstalled else { return false }
-        // S1-mini v1 is English-only.
-        let language = preferences.language ?? Locale.current.language.languageCode?.identifier ?? "en"
-        return sessionModel.isEnglishOnly || language.hasPrefix("en")
+        let engine = preferences.cleanUpEngine
+        guard preferences.formattingEnabled, models.isCleanUpReady(engine) else { return false }
+        let language = sessionModel.isEnglishOnly ? "en" : preferences.language
+        switch engine {
+        case .s1Mini:
+            // S1-mini v1 is English-only.
+            return (language ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("en")
+        case .chatGPT:
+            return true
+        }
+    }
+
+    /// Silence, an accidental tap, or filler only: no error, just a shrug.
+    private func nothingHeard() {
+        log.notice("Session ended: nothing heard")
+        finish(.nothingHeard, after: 1.1)
     }
 
     private func fail(_ message: String, quiet: Bool = false, openSettings: Bool = false) {
@@ -350,6 +371,7 @@ final class DictationController {
 
     private func finish(_ final: DictationPhase, after seconds: Double) {
         session = nil
+        models.endUse()
         isWaitingForModel = false
         hotkey.capturesEscape = false
         listeningSince = nil
@@ -429,8 +451,10 @@ extension DictationController {
         try? await Task.sleep(for: .seconds(1.5))
         phase = .done(pasted: true)
         try? await Task.sleep(for: .seconds(1.5))
-        phase = .failed("Didn't catch that")
+        phase = .nothingHeard
         try? await Task.sleep(for: .seconds(2))
+        phase = .failed("Kaze needs microphone access")
+        try? await Task.sleep(for: .seconds(2.5))
         phase = .idle
     }
 }

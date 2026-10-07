@@ -26,7 +26,7 @@ struct IslandView: View {
     /// its motion instead of being swapped out.
     private var showsWave: Bool {
         switch dictation.phase {
-        case .listening, .transcribing, .formatting: true
+        case .listening, .transcribing, .formatting, .nothingHeard: true
         default: false
         }
     }
@@ -35,6 +35,7 @@ struct IslandView: View {
         switch dictation.phase {
         case .transcribing: dictation.isWaitingForModel ? .loading : .transcribing
         case .formatting: .cleaning
+        case .nothingHeard: .silent
         default: .live
         }
     }
@@ -42,6 +43,10 @@ struct IslandView: View {
     private let spring = Animation.kaze
 
     private var notch: CGSize { presentation.geometry.notchSize }
+
+    /// Bumped each time nothing was heard, to play a small "nope" shake.
+    @State private var shakes = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Layout: Equatable {
         case closed, compact, expanded
@@ -53,7 +58,7 @@ struct IslandView: View {
         case .idle: return .closed
         case .listening: return dictation.liveText.isEmpty ? .compact : .expanded
         case .failed: return .expanded
-        default: return .compact
+        default: return .compact   // includes .nothingHeard
         }
     }
 
@@ -65,6 +70,7 @@ struct IslandView: View {
         case .transcribing, .formatting: "working"
         case .done: "done"
         case .failed: "failed"
+        case .nothingHeard: "nothing"
         }
     }
 
@@ -109,6 +115,21 @@ struct IslandView: View {
             .clipShape(IslandShape(topRadius: shoulder, bottomRadius: bottomRadius))
             .animation(spring, value: layout)
             .animation(spring, value: bodySize)
+            .keyframeAnimator(initialValue: CGFloat(0), trigger: shakes) { island, x in
+                island.offset(x: x)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    LinearKeyframe(0, duration: 0.12)   // let the bars settle first
+                    SpringKeyframe(-7, duration: 0.07)
+                    SpringKeyframe(6, duration: 0.08)
+                    SpringKeyframe(-4, duration: 0.08)
+                    SpringKeyframe(2, duration: 0.08)
+                    SpringKeyframe(0, duration: 0.12)
+                }
+            }
+            .onChange(of: dictation.phase) { _, phase in
+                if phase == .nothingHeard, !reduceMotion { shakes += 1 }
+            }
 
             Spacer(minLength: 0)
         }
@@ -186,11 +207,7 @@ struct IslandView: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .symbolEffect(.bounce, value: dictation.phase)
-        case .failed:
-            Image(systemName: "exclamationmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.orange)
-        case .idle:
+        case .failed, .nothingHeard, .idle:
             EmptyView()
         }
     }
@@ -216,10 +233,16 @@ struct IslandView: View {
     private var expandedContent: some View {
         switch dictation.phase {
         case .failed(let message):
-            Text(message)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(1)
+            HStack(spacing: 7) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
         default:
             Text(dictation.liveText)
                 .font(.system(size: 13, weight: .medium))
@@ -267,6 +290,8 @@ private struct RecordingDot: View {
 struct ActivityWave: View {
     enum Mode: Equatable {
         case live, transcribing, loading, cleaning
+        /// Nothing was heard: the bars settle into flat dots.
+        case silent
     }
 
     let mode: Mode
@@ -319,7 +344,7 @@ struct ActivityWave: View {
         case .cleaning:
             // An uneven shimmer.
             target = 0.25 + 0.55 * (0.5 + 0.5 * sin(t * 4.2 + i * 1.3)) * (0.55 + 0.45 * sin(t * 1.9 + i * 0.7))
-        case .live:
+        case .live, .silent:
             target = 0
         }
         let start = index < frozen.count ? Double(frozen[index]) : target
@@ -331,6 +356,7 @@ struct ActivityWave: View {
         switch mode {
         case .live: 0.55 + 0.45 * Double(value)
         case .cleaning: 0.45 + 0.4 * (0.5 + 0.5 * sin(t * 3 + Double(index) * 0.9))
+        case .silent: 0.35
         default: 0.5 + 0.4 * Double(value)
         }
     }
