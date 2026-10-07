@@ -27,6 +27,31 @@
     -->
 
     <item>
+      <title>Version 1.1</title>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <pubDate>Wed, 07 Oct 2026 06:28:10 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 1.1</h2>
+        <ul>
+          <li>Sign in with ChatGPT: Clean Up can now use a model from your own ChatGPT plan. Sign in once in your browser, no API key needed. It uses GPT-5.6-Luna at the lowest thinking level by default, and you can pick the model and thinking level in Settings.</li>
+          <li>Your choice of Clean Up model: S1-mini by Superwhisper stays the default and runs entirely on your Mac. ChatGPT is opt-in; it sends your transcript to OpenAI for that request, and it isn't saved to your ChatGPT history.</li>
+          <li>Much lighter on memory: speech models load the moment you press your shortcut and are freed after a few idle minutes or when macOS needs the memory. S1-mini is freed right after each cleanup, instead of holding 1.4 GB.</li>
+          <li>No more "Didn't catch that": if you tap by accident or don't speak, the notch gives a small shake and gets out of your way. Real errors show in a single clear line.</li>
+          <li>Safer cleanups: if a model ever answers your words or rewrites them instead of cleaning them, Kaze pastes exactly what you said.</li>
+          <li>A cleaner Clean Up page and onboarding step, with a clear note on how much memory S1-mini uses.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v1.1/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="UQfr5aXV1ZWJ+1unfp9QdeYeAd7/4XjjLMVQnD4pApI8BJYm5TUPtoaXJaqIVZBs6HvDuy5psseNSSB3sulwCA=="
+        length="35195465"
+      />
+    </item>
+
+    <item>
       <title>Version 1.0</title>
       <sparkle:version>14</sparkle:version>
       <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
