@@ -187,7 +187,7 @@ final class DictationController {
         listeningSince = Date()
         stoppedAt = nil
         phase = .listening(handsFree: handsFree)
-        hotkey.capturesEscape = true
+        hotkey.capturesEscape = preferences.escapeToCancel
         Sounds.play(.start, enabled: preferences.playSounds)
 
         // Load the models while the user speaks (~0.1 s once macOS has
