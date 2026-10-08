@@ -65,7 +65,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         dictate.isEnabled = app.models.state(of: prefs.speechModel).isInstalled
         menu.addItem(dictate)
 
-        let recent = app.history.items.prefix(5)
+        let recent = app.history.items.lazy.filter { $0.failure == nil }.prefix(5)
         if !recent.isEmpty {
             let header = NSMenuItem(title: "Recent", action: nil, keyEquivalent: "")
             header.isEnabled = false

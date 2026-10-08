@@ -21,6 +21,7 @@ final class AppModel {
         if let id = preferences.microphoneID, let device = AVCaptureDevice(uniqueID: id), AudioInputDevice.isIgnored(device) {
             preferences.microphoneID = nil
         }
+        history.recoverInterruptedRecordings(model: preferences.speechModel)
         dictation = DictationController(preferences: preferences, models: models, vocabulary: vocabulary, history: history)
         permissions.onAccessibilityGranted = { [weak self] in
             self?.startShortcutMonitoring()

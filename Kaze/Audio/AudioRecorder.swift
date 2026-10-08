@@ -95,16 +95,18 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
     private var output: AVCaptureAudioDataOutput?
     private var input: AVCaptureDeviceInput?
 
-    // Conversion state; only touched on `captureQueue`.
+    // Conversion and file state; only touched on `captureQueue`.
     private var converter: AVAudioConverter?
     private var converterInputFormat: AVAudioFormat?
+    private var file: AVAudioFile?
     private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: AudioRecorder.sampleRate, channels: 1, interleaved: false)!
 
     private let log = Logger(subsystem: "com.fayazahmed.Kaze", category: "Audio")
 
     /// Starts capturing. Returns once the device is configured; audio begins
-    /// flowing a moment later.
-    func start(deviceID: String?) async throws {
+    /// flowing a moment later. With `fileURL`, audio is also written to disk
+    /// as it arrives, so a crash mid-dictation still leaves a playable file.
+    func start(deviceID: String?, fileURL: URL? = nil) async throws {
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             throw AudioRecorderError.permissionDenied
         }
@@ -113,6 +115,9 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
             $0.samples.reserveCapacity(Int(Self.sampleRate) * 60)
             $0.peakLevel = 0
             $0.isCapturing = true
+        }
+        captureQueue.async { [self] in
+            file = fileURL.flatMap(Self.makeFile)
         }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -137,9 +142,12 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
                 continuation.resume()
             }
         }
-        // Drain chunks already queued for conversion.
+        // Drain chunks already queued for conversion, then close the file.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            captureQueue.async { continuation.resume() }
+            captureQueue.async { [self] in
+                file = nil
+                continuation.resume()
+            }
         }
         return state.withLock { state in
             state.isCapturing = false
@@ -204,6 +212,19 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
         }
         onSamples?(chunk)
         onLevel?(level)
+        write(chunk)
+    }
+
+    private func write(_ chunk: [Float]) {
+        guard let file, let buffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(chunk.count)) else { return }
+        buffer.frameLength = buffer.frameCapacity
+        chunk.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: chunk.count) }
+        do {
+            try file.write(from: buffer)
+        } catch {
+            log.error("Couldn't write recording: \(error.localizedDescription, privacy: .public)")
+            self.file = nil
+        }
     }
 
     private func convert(_ sampleBuffer: CMSampleBuffer) -> [Float]? {
@@ -245,5 +266,38 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
         vDSP_rmsqv(samples, 1, &rms, vDSP_Length(samples.count))
         let db = 20 * log10(max(rms, 1e-7))
         return min(max((db + 50) / 40, 0), 1)
+    }
+
+    // MARK: - Recordings on disk
+
+    /// 16-bit CAF. Core Audio updates the header on every write, so the file
+    /// stays readable up to the last chunk even if Kaze never closes it.
+    private static func makeFile(at url: URL) -> AVAudioFile? {
+        _ = StorageLocations.ensure(url.deletingLastPathComponent())
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+        ]
+        return try? AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+    }
+
+    /// Reads a saved recording back as 16 kHz mono Float32.
+    static func readRecording(at url: URL) throws -> [Float] {
+        let file = try AVAudioFile(forReading: url)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
+            throw AudioRecorderError.configurationFailed
+        }
+        try file.read(into: buffer)
+        guard let channel = buffer.floatChannelData?[0] else { return [] }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+    }
+
+    /// Length of a saved recording in seconds, or 0 if it can't be read.
+    static func duration(ofRecordingAt url: URL) -> TimeInterval {
+        guard let file = try? AVAudioFile(forReading: url) else { return 0 }
+        return Double(file.length) / file.fileFormat.sampleRate
     }
 }

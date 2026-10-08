@@ -32,8 +32,14 @@ struct HistoryPane: View {
                     ForEach(filtered) { item in
                         HistoryRow(item: item)
                             .contextMenu {
-                                Button("Copy") { copy(item.text) }
+                                if item.failure == nil { Button("Copy") { copy(item.text) } }
                                 if let raw = item.rawText { Button("Copy Original Transcript") { copy(raw) } }
+                                if let recording = item.recordingURL {
+                                    Divider()
+                                    Button("Retry Transcription") { app.dictation.retry(item) }
+                                        .disabled(!app.dictation.canRetry || app.dictation.retrying.contains(item.id))
+                                    Button("Show Recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([recording]) }
+                                }
                                 Divider()
                                 Button("Delete", role: .destructive) { app.history.delete(item) }
                             }
@@ -48,6 +54,10 @@ struct HistoryPane: View {
             HStack {
                 Toggle("Keep history", isOn: $prefs.saveHistory)
                     .toggleStyle(.checkbox)
+                Toggle("Keep audio", isOn: $prefs.keepRecordings)
+                    .toggleStyle(.checkbox)
+                    .disabled(!prefs.saveHistory)
+                    .help("Save the recording of every dictation so it can be transcribed again. Recordings that fail or are cancelled are always kept until you delete them.")
                 Spacer()
                 Button("Clear History…") { confirmClear = true }
                     .disabled(app.history.items.isEmpty)
@@ -58,7 +68,7 @@ struct HistoryPane: View {
         .confirmationDialog("Clear all dictation history?", isPresented: $confirmClear) {
             Button("Clear History", role: .destructive) { app.history.clear() }
         } message: {
-            Text("This can't be undone.")
+            Text("Dictations and their recordings will be deleted. This can't be undone.")
         }
     }
 
@@ -103,6 +113,7 @@ private struct StatTile: View {
 }
 
 private struct HistoryRow: View {
+    @Environment(AppModel.self) private var app
     let item: HistoryItem
     @State private var hovering = false
     @State private var copied = false
@@ -112,13 +123,18 @@ private struct HistoryRow: View {
             appIcon
                 .frame(width: 20, height: 20)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.text)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
+                if let failure = item.failure {
+                    Label("\(failure) · \(Duration.seconds(item.duration).formatted(.time(pattern: .minuteSecond))) recording", systemImage: "exclamationmark.circle")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(item.text)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                }
                 HStack(spacing: 6) {
                     Text(item.date, format: .relative(presentation: .named))
                     if let app = item.appName { Text("· \(app)") }
-                    Text("· \(item.model.title)")
+                    if item.failure == nil { Text("· \(item.model.title)") }
                     if item.rawText != nil {
                         Image(systemName: "wand.and.sparkles")
                             .help("Formatted by S1-mini")
@@ -128,21 +144,31 @@ private struct HistoryRow: View {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(item.text, forType: .string)
-                copied = true
-                Task {
-                    try? await Task.sleep(for: .seconds(1.2))
-                    copied = false
+            if item.failure != nil, item.recordingURL != nil {
+                if app.dictation.retrying.contains(item.id) {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Retry") { app.dictation.retry(item) }
+                        .disabled(!app.dictation.canRetry)
+                        .help("Transcribe this recording again with \(app.preferences.speechModel.title)")
                 }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .frame(width: 16)
+            } else if item.failure == nil {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(item.text, forType: .string)
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.2))
+                        copied = false
+                    }
+                } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .frame(width: 16)
+                }
+                .buttonStyle(.borderless)
+                .opacity(hovering || copied ? 1 : 0)
+                .help("Copy")
             }
-            .buttonStyle(.borderless)
-            .opacity(hovering || copied ? 1 : 0)
-            .help("Copy")
         }
         .padding(.vertical, 4)
         .onHover { hovering = $0 }
