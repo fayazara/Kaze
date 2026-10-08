@@ -49,10 +49,13 @@ struct ShortcutPane: View {
                 }
             } header: {
                 Text("How it works")
-            } footer: {
-                Label("Press esc at any time to cancel a dictation.", systemImage: "escape")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(isOn: $prefs.escapeToCancel) {
+                    Text("Press esc to cancel")
+                    Text("Escape discards the dictation in progress. Turn off to let esc reach the app you're using.")
+                }
             }
         }
     }

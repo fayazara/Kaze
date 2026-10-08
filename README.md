@@ -13,7 +13,7 @@ Grab the latest `.dmg` from [GitHub Releases](https://github.com/fayazara/Kaze/r
 1. **Hold your shortcut** (default: `fn`) and talk. A small island grows out of the notch with a live waveform.
 2. **Let go.** Kaze transcribes, optionally cleans the text up, and pastes it where your cursor is. Your clipboard is restored afterwards.
 
-Prefer hands-free? **Tap** the shortcut once instead of holding it; Kaze keeps listening until you tap again. Press `esc` to cancel at any point.
+Prefer hands-free? **Tap** the shortcut once instead of holding it; Kaze keeps listening until you tap again. Press `esc` to cancel at any point (you can turn this off in Settings → Shortcut).
 
 ```
 shortcut ─▶ microphone (16 kHz) ─▶ speech model ─▶ Clean Up (optional) ─▶ replacements ─▶ paste

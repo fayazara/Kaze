@@ -86,6 +86,7 @@ final class Preferences {
         static let language = "v1.language"
         static let shortcut = "v1.shortcut"
         static let activationMode = "v1.activationMode"
+        static let escapeToCancel = "v1.escapeToCancel"
         static let microphoneID = "v1.microphoneID"
         static let formattingEnabled = "v1.formattingEnabled"
         static let cleanUpEngine = "v1.cleanUpEngine"
@@ -109,6 +110,8 @@ final class Preferences {
     var language: String? { didSet { defaults.set(language, forKey: Key.language) } }
     var shortcut: Shortcut { didSet { defaults.set(try? JSONEncoder().encode(shortcut), forKey: Key.shortcut) } }
     var activationMode: ActivationMode { didSet { defaults.set(activationMode.rawValue, forKey: Key.activationMode) } }
+    /// Whether Escape cancels an active dictation (and is kept from the frontmost app).
+    var escapeToCancel: Bool { didSet { defaults.set(escapeToCancel, forKey: Key.escapeToCancel) } }
     /// Capture device unique ID, or `nil` for the system default input.
     var microphoneID: String? { didSet { defaults.set(microphoneID, forKey: Key.microphoneID) } }
     var formattingEnabled: Bool { didSet { defaults.set(formattingEnabled, forKey: Key.formattingEnabled) } }
@@ -130,6 +133,7 @@ final class Preferences {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.register(defaults: [
+            Key.escapeToCancel: true,
             Key.formattingEnabled: false,
             Key.allowLists: true,
             Key.emailInMailApps: true,
@@ -144,6 +148,7 @@ final class Preferences {
         language = defaults.string(forKey: Key.language)
         shortcut = defaults.data(forKey: Key.shortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) } ?? .default
         activationMode = ActivationMode(rawValue: defaults.string(forKey: Key.activationMode) ?? "") ?? .automatic
+        escapeToCancel = defaults.bool(forKey: Key.escapeToCancel)
         microphoneID = defaults.string(forKey: Key.microphoneID)
         formattingEnabled = defaults.bool(forKey: Key.formattingEnabled)
         // On-device by default; ChatGPT only when the user opts in.
