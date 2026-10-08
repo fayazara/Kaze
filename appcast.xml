@@ -27,6 +27,26 @@
     -->
 
     <item>
+      <title>Version 1.1.2</title>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <pubDate>Thu, 08 Oct 2026 20:28:25 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 1.1.2</h2>
+        <ul>
+          <li>Added a setting to turn off Escape-to-cancel, so esc reaches the app you're using during dictation (Settings → Shortcut). Thanks @kristianfreeman!</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v1.1.2/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="VnzZbWiboToHeoQqPWtCtdHbQtBKOpTkSLGKlAV30TOWnvAy7rsrXl1ccBHrFUvsHyZpsvB2fz98YUOyx7ziDw=="
+        length="35200414"
+      />
+    </item>
+
+    <item>
       <title>Version 1.1.1</title>
       <sparkle:version>16</sparkle:version>
       <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
