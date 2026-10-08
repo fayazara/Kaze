@@ -27,6 +27,27 @@
     -->
 
     <item>
+      <title>Version 1.1.1</title>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <pubDate>Thu, 08 Oct 2026 19:12:09 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 1.1.1</h2>
+        <ul>
+          <li>Fixed transitions on the welcome and completion screens during onboarding.</li>
+          <li>Refined the notch island’s compact corners.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v1.1.1/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="RcmiUDWMp+zeBRtikXnpr1EQHWh9LRMlpeoNZA/a8oLxSRDBR57aN1Sy2jR8T1rlApUsebj2ZSVSYxOGE4OYCQ=="
+        length="35197614"
+      />
+    </item>
+
+    <item>
       <title>Version 1.1</title>
       <sparkle:version>15</sparkle:version>
       <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
