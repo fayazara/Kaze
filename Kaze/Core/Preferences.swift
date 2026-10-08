@@ -100,6 +100,7 @@ final class Preferences {
         static let playSounds = "v1.playSounds"
         static let showLivePreview = "v1.showLivePreview"
         static let saveHistory = "v1.saveHistory"
+        static let keepRecordings = "v1.keepRecordings"
         static let hasCompletedOnboarding = "v1.hasCompletedOnboarding"
     }
 
@@ -128,6 +129,8 @@ final class Preferences {
     var playSounds: Bool { didSet { defaults.set(playSounds, forKey: Key.playSounds) } }
     var showLivePreview: Bool { didSet { defaults.set(showLivePreview, forKey: Key.showLivePreview) } }
     var saveHistory: Bool { didSet { defaults.set(saveHistory, forKey: Key.saveHistory) } }
+    /// Keep the audio of transcribed dictations too, not only failed ones.
+    var keepRecordings: Bool { didSet { defaults.set(keepRecordings, forKey: Key.keepRecordings) } }
     var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding) } }
 
     init(defaults: UserDefaults = .standard) {
@@ -163,6 +166,7 @@ final class Preferences {
         playSounds = defaults.bool(forKey: Key.playSounds)
         showLivePreview = defaults.bool(forKey: Key.showLivePreview)
         saveHistory = defaults.bool(forKey: Key.saveHistory)
+        keepRecordings = defaults.bool(forKey: Key.keepRecordings)
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
     }
 }

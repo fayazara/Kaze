@@ -48,6 +48,8 @@ final class DictationController {
     private(set) var targetApp: NSRunningApplication?
     /// The speech model was still loading when recording ended.
     private(set) var isWaitingForModel = false
+    /// Saved recordings being transcribed again from History.
+    private(set) var retrying: Set<HistoryItem.ID> = []
 
     static let levelCount = 28
 
@@ -62,6 +64,8 @@ final class DictationController {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var session: (any TranscriptionSession)?
     @ObservationIgnored private var sessionModel: SpeechModel = .apple
+    /// Names the session's audio file and, if it's kept, its history item.
+    @ObservationIgnored private var recordingID = UUID()
     @ObservationIgnored private var pressedAt: Date?
     @ObservationIgnored private var resetTask: Task<Void, Never>?
     @ObservationIgnored private var maxDurationTask: Task<Void, Never>?
@@ -77,6 +81,9 @@ final class DictationController {
     private static let maxDuration: Duration = .seconds(10 * 60)
     /// Recordings whose loudest moment stays below this are treated as silence.
     private static let speechLevelThreshold: Float = 0.18
+    /// Recordings that don't become text are kept for retrying unless shorter
+    /// than this (accidental taps).
+    private static let minimumKeptDuration: TimeInterval = 1
 
     /// While `true`, the shortcut is ignored (e.g. while recording a new one).
     var isPaused = false
@@ -181,6 +188,8 @@ final class DictationController {
 
         self.session = session
         sessionModel = model
+        let recordingID = UUID()
+        self.recordingID = recordingID
         targetApp = NSWorkspace.shared.frontmostApplication
         liveText = ""
         levels = Array(repeating: 0, count: Self.levelCount)
@@ -193,7 +202,7 @@ final class DictationController {
         // Load the models while the user speaks (~0.1 s once macOS has
         // cached the Neural Engine build), and keep them until we're done.
         models.beginUse(model)
-        if shouldFormat {
+        if shouldFormat(model) {
             let cleaner = models.cleaner(for: preferences.cleanUpEngine)
             Task { try? await cleaner.prepare() }
         }
@@ -209,8 +218,9 @@ final class DictationController {
 
         Task {
             do {
-                try await recorder.start(deviceID: preferences.microphoneID)
+                try await recorder.start(deviceID: preferences.microphoneID, fileURL: StorageLocations.recording(for: recordingID))
             } catch {
+                HistoryStore.deleteRecording(recordingID)
                 guard self.generation == generation else { return }
                 session.cancel()
                 fail(error.localizedDescription, openSettings: (error as? AudioRecorderError) == .permissionDenied)
@@ -229,6 +239,7 @@ final class DictationController {
         guard phase.isListening, let session else { return }
         let generation = generation
         let model = sessionModel
+        let recordingID = recordingID
         let stoppedAt = Date()
         maxDurationTask?.cancel()
         isWaitingForModel = models.warmingModel == model
@@ -244,6 +255,7 @@ final class DictationController {
             let duration = Double(audio.count) / AudioRecorder.sampleRate
             guard duration > 0.3, peak >= Self.speechLevelThreshold else {
                 session.cancel()
+                keepRecording(duration: duration, reason: "Too quiet to transcribe")
                 nothingHeard()
                 return
             }
@@ -255,26 +267,35 @@ final class DictationController {
                     try await session.finish(audio: audio)
                 }
                 guard self.generation == generation else { return }
-                try await deliver(raw: TextPolisher.clean(raw), model: model, duration: duration, stoppedAt: stoppedAt, generation: generation)
+                try await deliver(raw: TextPolisher.clean(raw), model: model, recordingID: recordingID, duration: duration, stoppedAt: stoppedAt, generation: generation)
             } catch is CancellationError {
                 return
             } catch {
                 guard self.generation == generation else { return }
                 log.error("Transcription failed: \(error.localizedDescription, privacy: .public)")
-                fail(error is TimeoutError ? "Transcription took too long" : error.localizedDescription)
+                let reason = error is TimeoutError ? "Transcription took too long" : error.localizedDescription
+                keepRecording(duration: duration, reason: reason)
+                fail(reason)
             }
         }
     }
 
     func cancel(silently: Bool) {
         guard phase.isActive else { return }
+        let recordingID = recordingID
+        let duration = listeningSince.map { (stoppedAt ?? Date()).timeIntervalSince($0) } ?? 0
+        // Escape is easy to hit by mistake; a chord (`silently`) never meant to dictate.
+        let kept = silently || duration < Self.minimumKeptDuration ? nil : keptItem(duration: duration, reason: "Cancelled")
         generation += 1
         session?.cancel()
         session = nil
         maxDurationTask?.cancel()
         hotkey.capturesEscape = false
         let recorder = recorder
-        Task { _ = await recorder.stop() }
+        Task {
+            _ = await recorder.stop()
+            if let kept { history.add(kept) } else { HistoryStore.deleteRecording(recordingID) }
+        }
         liveText = ""
         listeningSince = nil
         phase = .idle
@@ -282,42 +303,24 @@ final class DictationController {
         if !silently { Sounds.play(.cancel, enabled: preferences.playSounds) }
     }
 
-    private func deliver(raw: String, model: SpeechModel, duration: TimeInterval, stoppedAt: Date, generation: Int) async throws {
+    private func deliver(raw: String, model: SpeechModel, recordingID: UUID, duration: TimeInterval, stoppedAt: Date, generation: Int) async throws {
         guard !raw.isEmpty else {
+            keepRecording(duration: duration, reason: "No words recognized")
             nothingHeard()
             return
         }
 
         var text = raw
-        if shouldFormat {
+        if shouldFormat(model) {
             phase = .formatting
-            let context: FormatContext = preferences.emailInMailApps && Self.isMailApp(targetApp) ? .email : .general
-            let formatter = models.cleaner(for: preferences.cleanUpEngine)
-            let style = preferences.formatStyle
-            let allowLists = preferences.allowLists
-            do {
-                let formatted = try await withTimeout(seconds: 20) {
-                    try await formatter.format(raw, style: style, allowLists: allowLists, context: context)
-                }
-                guard self.generation == generation else { return }
-                let cleaned = TextPolisher.clean(formatted)
-                if TextPolisher.isPlausibleRewrite(cleaned, of: raw) {
-                    text = cleaned
-                } else {
-                    log.notice("Discarded implausible formatter output")
-                }
-            } catch {
-                guard self.generation == generation else { return }
-                log.error("Formatting failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
-            }
-            // S1-mini holds ~1.4 GB and reloads in under a second while the
-            // next dictation is being spoken, so don't keep it around.
-            if preferences.cleanUpEngine == .s1Mini { models.formatter.unload() }
+            text = await cleanUp(raw, appBundleID: targetApp?.bundleIdentifier)
+            guard self.generation == generation else { return }
         }
 
         text = TextPolisher.applyReplacements(vocabulary.replacements, to: text)
         guard !text.isEmpty else {
             // The formatter returns nothing for filler-only speech ("um").
+            HistoryStore.deleteRecording(recordingID)
             nothingHeard()
             return
         }
@@ -329,6 +332,7 @@ final class DictationController {
 
         if preferences.saveHistory {
             history.add(HistoryItem(
+                id: recordingID,
                 date: Date(),
                 text: text,
                 rawText: raw == text ? nil : raw,
@@ -339,20 +343,129 @@ final class DictationController {
                 latency: Date().timeIntervalSince(stoppedAt)
             ))
         }
+        if !(preferences.saveHistory && preferences.keepRecordings) {
+            HistoryStore.deleteRecording(recordingID)
+        }
         log.info("Delivered \(text.count) chars in \(Date().timeIntervalSince(stoppedAt), format: .fixed(precision: 2))s after release")
         finish(.done(pasted: outcome == .pasted), after: outcome == .pasted ? 0.9 : 2.5)
     }
 
-    private var shouldFormat: Bool {
+    /// Clean Up's rewrite of `raw`, or `raw` itself if it fails or strays.
+    private func cleanUp(_ raw: String, appBundleID: String?) async -> String {
+        let context: FormatContext = preferences.emailInMailApps && Self.isMailApp(appBundleID) ? .email : .general
+        let formatter = models.cleaner(for: preferences.cleanUpEngine)
+        let style = preferences.formatStyle
+        let allowLists = preferences.allowLists
+        var text = raw
+        do {
+            let formatted = try await withTimeout(seconds: 20) {
+                try await formatter.format(raw, style: style, allowLists: allowLists, context: context)
+            }
+            let cleaned = TextPolisher.clean(formatted)
+            if TextPolisher.isPlausibleRewrite(cleaned, of: raw) {
+                text = cleaned
+            } else {
+                log.notice("Discarded implausible formatter output")
+            }
+        } catch {
+            log.error("Formatting failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
+        }
+        // S1-mini holds ~1.4 GB and reloads in under a second while the
+        // next dictation is being spoken, so don't keep it around.
+        if preferences.cleanUpEngine == .s1Mini { models.formatter.unload() }
+        return text
+    }
+
+    private func shouldFormat(_ model: SpeechModel) -> Bool {
         let engine = preferences.cleanUpEngine
         guard preferences.formattingEnabled, models.isCleanUpReady(engine) else { return false }
-        let language = sessionModel.isEnglishOnly ? "en" : preferences.language
+        let language = model.isEnglishOnly ? "en" : preferences.language
         switch engine {
         case .s1Mini:
             // S1-mini v1 is English-only.
             return (language ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("en")
         case .chatGPT:
             return true
+        }
+    }
+
+    // MARK: - Kept recordings
+
+    /// A history item for the current session's audio, which didn't become text.
+    private func keptItem(duration: TimeInterval, reason: String) -> HistoryItem {
+        HistoryItem(
+            id: recordingID,
+            date: Date(),
+            text: "",
+            model: sessionModel,
+            appName: targetApp?.localizedName,
+            appBundleID: targetApp?.bundleIdentifier,
+            duration: duration,
+            latency: 0,
+            failure: reason
+        )
+    }
+
+    /// Lists the current session's audio in History so it can be retried, even
+    /// with history off: it's the only copy. Accidental taps are deleted.
+    private func keepRecording(duration: TimeInterval, reason: String) {
+        guard duration >= Self.minimumKeptDuration else {
+            HistoryStore.deleteRecording(recordingID)
+            return
+        }
+        log.notice("Kept recording: \(reason, privacy: .public)")
+        history.add(keptItem(duration: duration, reason: reason))
+    }
+
+    var canRetry: Bool {
+        !phase.isActive && models.state(of: preferences.speechModel).isInstalled
+    }
+
+    /// Transcribes a saved recording again with the current model, updates
+    /// its history item, and copies the text.
+    func retry(_ item: HistoryItem) {
+        let model = preferences.speechModel
+        guard canRetry, !retrying.contains(item.id), let url = item.recordingURL else { return }
+        retrying.insert(item.id)
+        models.beginUse(model)
+
+        Task {
+            var updated = item
+            do {
+                let audio = try AudioRecorder.readRecording(at: url)
+                let options = RecognitionOptions(vocabulary: vocabulary.words, language: preferences.language)
+                let session = try models.engine(for: model).makeSession(options: options) { _ in }
+                // Streaming engines only hear what's appended, so feed it as if live.
+                let second = Int(AudioRecorder.sampleRate)
+                for start in stride(from: 0, to: audio.count, by: second) {
+                    session.append(Array(audio[start..<min(start + second, audio.count)]))
+                }
+                let transcript = try await withTimeout(seconds: max(60, item.duration * 3)) {
+                    try await session.finish(audio: audio)
+                }
+                let raw = TextPolisher.clean(transcript)
+                var text = raw
+                if !raw.isEmpty, shouldFormat(model) { text = await cleanUp(raw, appBundleID: item.appBundleID) }
+                text = TextPolisher.applyReplacements(vocabulary.replacements, to: text)
+                if !text.isEmpty {
+                    updated.text = text
+                    updated.rawText = raw == text ? nil : raw
+                    updated.model = model
+                    updated.failure = nil
+                    inserter.copy(text)
+                } else if item.failure != nil {
+                    updated.failure = "No words recognized"
+                }
+            } catch {
+                log.error("Retry failed: \(error.localizedDescription, privacy: .public)")
+                // A failed retry of a transcribed item leaves its text alone.
+                if item.failure != nil {
+                    updated.failure = error is TimeoutError ? "Transcription took too long" : error.localizedDescription
+                }
+            }
+            history.update(updated)
+            retrying.remove(item.id)
+            if !phase.isActive { models.endUse() }
         }
     }
 
@@ -399,9 +512,9 @@ final class DictationController {
         "com.hey.app.desktop",
     ]
 
-    private static func isMailApp(_ app: NSRunningApplication?) -> Bool {
-        guard let id = app?.bundleIdentifier else { return false }
-        return mailApps.contains(id)
+    private static func isMailApp(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return mailApps.contains(bundleID)
     }
 }
 

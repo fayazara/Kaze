@@ -160,6 +160,12 @@ nonisolated enum StorageLocations {
     static var formatterModel: URL { root.appendingPathComponent("S1-mini", isDirectory: true) }
     static var history: URL { root.appendingPathComponent("history.json") }
     static var vocabulary: URL { root.appendingPathComponent("vocabulary.json") }
+    static var recordings: URL { root.appendingPathComponent("Recordings", isDirectory: true) }
+
+    /// The audio of one dictation, named after its history item.
+    static func recording(for id: UUID) -> URL {
+        recordings.appendingPathComponent("\(id.uuidString).caf")
+    }
 
     static func ensure(_ url: URL) -> URL {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
