@@ -93,7 +93,7 @@ struct IslandView: View {
     private var bottomRadius: CGFloat {
         switch layout {
         case .closed: presentation.geometry.hasNotch ? 10 : 4
-        case .compact: min(16, notch.height / 2)
+        case .compact: shoulder
         case .expanded: 22
         }
     }

@@ -1,6 +1,8 @@
 #if DEBUG
+import AppKit
 import AVFoundation
 import Foundation
+import os
 
 /// Headless checks for development builds, run from the command line:
 ///
@@ -19,6 +21,16 @@ enum SelfTest {
             return args[index + 1]
         }
         let models = AppModel.shared.models
+
+        if args.contains("--focus") {
+            let ax = FocusedApp.accessibilityFocused()
+            let front = NSWorkspace.shared.frontmostApplication
+            print("AX trusted: \(AXIsProcessTrusted())")
+            print("AX focused: \(ax?.localizedName ?? "nil (unavailable)") [\(ax?.processIdentifier ?? 0)]")
+            print("frontmost:  \(front?.localizedName ?? "nil") [\(front?.processIdentifier ?? 0)]")
+            Logger(subsystem: "com.fayazahmed.Kaze", category: "SelfTest").notice("focus: trusted=\(AXIsProcessTrusted()) ax=\(ax?.localizedName ?? "nil", privacy: .public) front=\(front?.localizedName ?? "nil", privacy: .public)")
+            return 0
+        }
 
         if args.contains("--chatgpt-catalog") {
             do {

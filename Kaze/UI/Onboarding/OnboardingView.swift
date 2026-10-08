@@ -107,8 +107,10 @@ private struct WelcomeStep: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 112, height: 112)
-                .scaleEffect(appeared ? 1 : 0.85)
-                .opacity(appeared ? 1 : 0)
+                .animation(.kaze.delay(0.1)) { $0
+                    .scaleEffect(appeared ? 1 : 0.85)
+                    .opacity(appeared ? 1 : 0)
+                }
             VStack(spacing: 10) {
                 Text("Speak. Kaze types.")
                     .font(.system(size: 34, weight: .bold))
@@ -126,7 +128,7 @@ private struct WelcomeStep: View {
             .padding(.top, 8)
             Spacer(minLength: 0)
         }
-        .onAppear { withAnimation(.kaze.delay(0.1)) { appeared = true } }
+        .onAppear { appeared = true }
     }
 }
 
@@ -451,8 +453,10 @@ private struct DoneStep: View {
                 .foregroundStyle(Color.solidBackground)
                 .frame(width: 72, height: 72)
                 .glassEffect(.regular.tint(.solidLabel), in: .circle)
-                .scaleEffect(appeared ? 1 : 0.6)
-                .opacity(appeared ? 1 : 0)
+                .animation(.kaze.delay(0.1)) { $0
+                    .scaleEffect(appeared ? 1 : 0.6)
+                    .opacity(appeared ? 1 : 0)
+                }
             Text("You're all set")
                 .font(.system(size: 30, weight: .bold))
             HStack(spacing: 8) {
@@ -467,7 +471,7 @@ private struct DoneStep: View {
                 .multilineTextAlignment(.center)
             Spacer(minLength: 0)
         }
-        .onAppear { withAnimation(.kaze.delay(0.1)) { appeared = true } }
+        .onAppear { appeared = true }
     }
 }
 
