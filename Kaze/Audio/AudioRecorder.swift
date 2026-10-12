@@ -217,6 +217,10 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
 
         if converter == nil || converterInputFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: outputFormat)
+            // Stereo/multi-channel mics report Left/Right channel labels, which
+            // map to nothing in a mono output and convert to silence. Mix all
+            // channels down instead.
+            converter?.downmix = true
             converterInputFormat = inputFormat
         }
         guard let converter else { return nil }
