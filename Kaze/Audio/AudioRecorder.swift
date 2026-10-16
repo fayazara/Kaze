@@ -215,13 +215,21 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
         let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(sampleBuffer, at: 0, frameCount: Int32(frameCount), into: pcm.mutableAudioBufferList)
         guard status == noErr else { return nil }
 
-        if converter == nil || converterInputFormat != inputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: outputFormat)
-            converterInputFormat = inputFormat
+        // Mix to mono ourselves so the converter only resamples. Left to
+        // AVAudioConverter, some multi-channel mics convert to silence.
+        let source = Self.mixToMono(pcm) ?? pcm
+
+        if converter == nil || converterInputFormat != source.format {
+            converter = AVAudioConverter(from: source.format, to: outputFormat)
+            // Fallback for multi-channel formats `mixToMono` can't read: their
+            // channel labels (e.g. Left/Right) map to nothing in a mono output,
+            // which converts to silence unless the converter downmixes.
+            converter?.downmix = true
+            converterInputFormat = source.format
         }
         guard let converter else { return nil }
 
-        let capacity = AVAudioFrameCount(Double(frameCount) * outputFormat.sampleRate / inputFormat.sampleRate) + 64
+        let capacity = AVAudioFrameCount(Double(frameCount) * outputFormat.sampleRate / source.format.sampleRate) + 64
         guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return nil }
 
         var consumed = false
@@ -233,10 +241,44 @@ nonisolated final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleB
             }
             consumed = true
             inputStatus.pointee = .haveData
-            return pcm
+            return source
         }
         guard error == nil, let channel = converted.floatChannelData?[0] else { return nil }
         return Array(UnsafeBufferPointer(start: channel, count: Int(converted.frameLength)))
+    }
+
+    /// Averages the channels that carry signal into one. Channels more than
+    /// 20 dB below the loudest are skipped, so a mic on one input of a
+    /// multi-input interface keeps its level instead of being halved by an
+    /// unused input. Returns nil for mono or non-Float32 buffers.
+    private static func mixToMono(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        let format = buffer.format
+        let channels = Int(format.channelCount)
+        guard channels > 1, let data = buffer.floatChannelData,
+              let monoFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1, interleaved: false),
+              let mono = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: buffer.frameLength),
+              let out = mono.floatChannelData?[0] else { return nil }
+        let frames = vDSP_Length(buffer.frameLength)
+        mono.frameLength = buffer.frameLength
+
+        // Interleaved data lives in one buffer with a stride of `channels`.
+        let stride = format.isInterleaved ? channels : 1
+        let starts = (0..<channels).map { format.isInterleaved ? data[0] + $0 : data[$0] }
+        let levels = starts.map { start -> Float in
+            var rms: Float = 0
+            vDSP_rmsqv(start, stride, &rms, frames)
+            return rms
+        }
+        let threshold = (levels.max() ?? 0) * 0.1
+        let active = starts.indices.filter { levels[$0] >= threshold }
+
+        vDSP_vclr(out, 1, frames)
+        for index in active {
+            vDSP_vadd(starts[index], stride, out, 1, out, 1, frames)
+        }
+        var scale = 1 / Float(active.count)
+        vDSP_vsmul(out, 1, &scale, out, 1, frames)
+        return mono
     }
 
     /// Perceptual loudness in 0...1, mapped from -50 dBFS...-10 dBFS.
