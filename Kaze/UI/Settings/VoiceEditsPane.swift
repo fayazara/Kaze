@@ -146,7 +146,7 @@ private struct VoiceEditDemo: View {
             .background {
                 // The selection highlight, until the edit lands.
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.solidLabel.opacity(done ? 0 : 0.12))
+                    .fill(Color.accentColor.opacity(done ? 0 : 0.25))
             }
             .multilineTextAlignment(text.contains("\n") ? .leading : .center)
             .fixedSize(horizontal: false, vertical: true)

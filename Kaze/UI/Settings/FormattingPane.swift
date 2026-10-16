@@ -124,13 +124,13 @@ struct GlassToggleChip: View {
                 Text(title)
             }
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(isOn ? Color.solidBackground : Color.solidLabel.opacity(0.8))
+            .foregroundStyle(isOn ? Color.white : Color.solidLabel.opacity(0.8))
             .padding(.horizontal, 12)
             .frame(height: 28)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassEffect(isOn ? .regular.tint(.solidLabel).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffect(isOn ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .capsule)
         .opacity(isEnabled ? 1 : 0.5)
         .motion(.kazeQuick, value: isOn)
     }
@@ -399,9 +399,9 @@ struct CleanUpEngineCard: View {
         if isSelected {
             Image(systemName: "checkmark")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.solidBackground)
+                .foregroundStyle(Color.white)
                 .frame(width: 28, height: 28)
-                .glassEffect(.regular.tint(.solidLabel), in: .circle)
+                .glassEffect(.regular.tint(.accentColor), in: .circle)
                 .glassEffectID("control", in: glass)
                 .help("In use")
         } else {

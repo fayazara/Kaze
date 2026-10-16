@@ -1,14 +1,13 @@
 import AppKit
 import SwiftUI
 
-// Kaze's visual language: monochrome ink on Liquid Glass. No brand colors and
-// no gradients; motion and glass morphing carry the personality.
+// Kaze's visual language: Liquid Glass in the system accent color. Text stays
+// in solid ink, no gradients; motion and glass morphing carry the personality.
 
 extension Color {
     /// Pure black in light mode, pure white in dark. `.primary` inside a
     /// button picks up the window tint, and `.labelColor` is translucent.
     static let solidLabel = Color(nsColor: NSColor(name: nil) { $0.isDark ? .white : .black })
-    static let solidBackground = Color(nsColor: NSColor(name: nil) { $0.isDark ? .black : .white })
     /// The one functional color: recording.
     static let recordRed = Color(red: 0.91, green: 0.0, blue: 0.17)
 }
@@ -105,7 +104,7 @@ struct GlassIconButton: View {
     }
 }
 
-/// A clear-glass capsule button with a label. `isProminent` inks it solid for
+/// A clear-glass capsule button with a label. `isProminent` fills it with the accent
 /// the primary action of a screen.
 struct GlassCapsuleButton: View {
     let title: String
@@ -127,20 +126,20 @@ struct GlassCapsuleButton: View {
                     .contentTransition(.numericText())
             }
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(isProminent ? Color.solidBackground : Color.solidLabel.opacity(isEnabled ? 0.9 : 0.3))
+            .foregroundStyle(isProminent ? Color.white : Color.solidLabel.opacity(isEnabled ? 0.9 : 0.3))
             .padding(.horizontal, 16)
             .frame(height: height)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassEffect(isProminent ? .regular.tint(.solidLabel).interactive(isEnabled) : .regular.interactive(isEnabled), in: .capsule)
+        .glassEffect(isProminent ? .regular.tint(.accentColor).interactive(isEnabled) : .regular.interactive(isEnabled), in: .capsule)
         .modifier(GlassMorph(morph: morph))
         .fixedSize()
         .accessibilityLabel(title)
     }
 }
 
-/// A glass capsule that doubles as a progress bar: it fills with solid ink as
+/// A glass capsule that doubles as a progress bar: it fills with the accent as
 /// work proceeds, with the label shown in reverse over the filled part.
 /// Tapping while running cancels.
 struct GlassProgressButton: View {
@@ -163,13 +162,13 @@ struct GlassProgressButton: View {
                 let filled = proxy.size.width * min(max(progress ?? 0, 0), 1)
                 ZStack(alignment: .leading) {
                     if running {
-                        Rectangle().fill(Color.solidLabel).frame(width: filled)
+                        Rectangle().fill(Color.accentColor).frame(width: filled)
                             .frame(maxHeight: .infinity)
                             .transition(.opacity)
                     }
                     label(running: running).foregroundStyle(Color.solidLabel.opacity(0.9))
                     if running {
-                        label(running: running).foregroundStyle(Color.solidBackground)
+                        label(running: running).foregroundStyle(Color.white)
                             .mask(alignment: .leading) { Rectangle().frame(width: filled) }
                     }
                 }
@@ -315,7 +314,7 @@ struct ModelGlyph: View {
     }
 }
 
-/// A row of glass capsules where the selected one is inked solid; the
+/// A row of glass capsules where the selected one fills with the accent; the
 /// selection morphs between options.
 struct GlassSegmentedPicker<Value: Hashable>: View {
     let options: [Value]
@@ -336,13 +335,13 @@ struct GlassSegmentedPicker<Value: Hashable>: View {
                             Text(title(option))
                         }
                         .font(.system(size: height < 32 ? 12 : 13, weight: .semibold))
-                        .foregroundStyle(selected ? Color.solidBackground : Color.solidLabel.opacity(0.8))
+                        .foregroundStyle(selected ? Color.white : Color.solidLabel.opacity(0.8))
                         .padding(.horizontal, height < 32 ? 11 : 14)
                         .frame(height: height)
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .glassEffect(selected ? .regular.tint(.solidLabel).interactive() : .regular.interactive(), in: .capsule)
+                    .glassEffect(selected ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .capsule)
                     .glassEffectID(option, in: glass)
                 }
             }

@@ -205,9 +205,9 @@ private struct PermissionCard: View {
                 if granted {
                     Image(systemName: "checkmark")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.solidBackground)
+                        .foregroundStyle(Color.white)
                         .frame(width: 34, height: 34)
-                        .glassEffect(.regular.tint(.solidLabel), in: .circle)
+                        .glassEffect(.regular.tint(.accentColor), in: .circle)
                         .glassEffectID("control", in: glass)
                 } else {
                     GlassCapsuleButton(title: "Allow", morph: ("control", glass), action: request)
@@ -489,9 +489,9 @@ private struct DoneStep: View {
             Spacer(minLength: 0)
             Image(systemName: "checkmark")
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(Color.solidBackground)
+                .foregroundStyle(Color.white)
                 .frame(width: 72, height: 72)
-                .glassEffect(.regular.tint(.solidLabel), in: .circle)
+                .glassEffect(.regular.tint(.accentColor), in: .circle)
                 .animation(.kaze.delay(0.1)) { $0
                     .scaleEffect(appeared ? 1 : 0.6)
                     .opacity(appeared ? 1 : 0)

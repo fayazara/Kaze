@@ -119,9 +119,9 @@ struct ModelCard: View {
             if isSelected {
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color.solidBackground)
+                    .foregroundStyle(Color.white)
                     .frame(width: 30, height: 30)
-                    .glassEffect(.regular.tint(.solidLabel), in: .circle)
+                    .glassEffect(.regular.tint(.accentColor), in: .circle)
                     .glassEffectID("control", in: glass)
                     .help("In use")
             } else {
