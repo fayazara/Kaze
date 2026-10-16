@@ -250,7 +250,7 @@ private struct CleanUpStep: View {
                 GlassSegmentedPicker(
                     options: CleanUpEngine.allCases,
                     selection: $prefs.cleanUpEngine,
-                    title: \.title,
+                    title: \.shortTitle,
                     height: 28
                 )
 
@@ -287,6 +287,18 @@ extension CleanUpStep {
             case .signedOut, .failed:
                 GlassCapsuleButton(title: "Sign in with ChatGPT", isProminent: true, height: 34) { app.models.chatGPT.signIn() }
             }
+        case .claude, .gemini:
+            if let account = app.models.keyAccount(for: prefs.cleanUpEngine) {
+                if account.hasKey {
+                    onOff
+                } else {
+                    APIKeyField(account: account, engine: prefs.cleanUpEngine, height: 30)
+                        .frame(maxWidth: 380)
+                        .id(prefs.cleanUpEngine)
+                }
+            }
+        case .instant:
+            onOff
         case .s1Mini:
             switch app.models.formatterState {
             case .installed:
@@ -315,6 +327,13 @@ extension CleanUpStep {
                 return "Signed in as \(email) · Uses your ChatGPT plan · Transcripts go to OpenAI, not saved to your history"
             }
             return "Uses your ChatGPT plan · Transcripts go to OpenAI, not saved to your history"
+        case .claude, .gemini:
+            guard let account = app.models.keyAccount(for: app.preferences.cleanUpEngine) else { return "" }
+            if let error = account.error { return error }
+            let vendor = account.provider.name
+            return "Uses your own \(vendor) API key, billed to your \(vendor) account · Transcripts go to \(vendor)"
+        case .instant:
+            return "Rules, no AI · Instant · Nothing to download · Stays on your Mac · English"
         case .s1Mini:
             return "\(FormatterModel.name) by \(FormatterModel.author) · \(app.models.diskUsageText(for: "formatter") ?? FormatterModel.downloadSize) · Uses up to 1.5 GB of memory while cleaning · English"
         }
@@ -322,7 +341,10 @@ extension CleanUpStep {
 }
 
 /// Raw speech that blur-morphs into its cleaned-up version, on a loop.
-private struct CleanUpDemo: View {
+struct CleanUpDemo: View {
+    /// Draws its own card; off when it sits inside one.
+    var framed = true
+
     private static let examples: [(String, String)] = [
         ("so um i need to send the report by uh friday no wait make that thursday", "I need to send the report by Thursday."),
         ("the invoice came to twenty three thousand four hundred and fifty dollars", "The invoice came to $23,450."),
@@ -335,23 +357,30 @@ private struct CleanUpDemo: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let example = Self.examples[index]
         VStack(spacing: 10) {
             Image(systemName: cleaned ? "text.badge.checkmark" : "waveform")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(cleaned ? Color.solidLabel.opacity(0.85) : Color.secondary)
                 .contentTransition(.symbolEffect(.replace))
-            Text(cleaned ? example.1 : example.0)
-                .font(.system(size: 17, weight: cleaned ? .semibold : .regular))
-                .foregroundStyle(cleaned ? Color.solidLabel : Color.secondary)
-                .multilineTextAlignment(cleaned && example.1.contains("\n") ? .leading : .center)
-                .id("\(index)-\(cleaned)")
-                .transition(.blurReplace)
-                .frame(maxWidth: 440, minHeight: 70)
+                // The two symbols differ in height; a fixed slot keeps the
+                // card from nudging everything below by a pixel.
+                .frame(width: 24, height: 20)
+            ZStack {
+                // Every example, invisible, so the card is always as tall as
+                // the tallest one and the layout never jumps.
+                ForEach(Self.examples.indices, id: \.self) { i in
+                    line(i, cleaned: false).hidden()
+                    line(i, cleaned: true).hidden()
+                }
+                line(index, cleaned: cleaned)
+                    .id("\(index)-\(cleaned)")
+                    .transition(.blurReplace)
+            }
+            .frame(maxWidth: 440)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
-        .surface()
+        .background(.primary.opacity(framed ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(cleaned ? 2.6 : 1.8))
@@ -365,6 +394,16 @@ private struct CleanUpDemo: View {
                 }
             }
         }
+    }
+
+    private func line(_ index: Int, cleaned: Bool) -> some View {
+        let example = Self.examples[index]
+        let text = cleaned ? example.1 : example.0
+        return Text(text)
+            .font(.system(size: 17, weight: cleaned ? .semibold : .regular))
+            .foregroundStyle(cleaned ? Color.solidLabel : Color.secondary)
+            .multilineTextAlignment(cleaned && text.contains("\n") ? .leading : .center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

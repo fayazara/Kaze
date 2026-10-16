@@ -34,13 +34,41 @@ final class ModelManager {
     private(set) var lastWarmUpError: String?
 
     let formatter = S1MiniFormatter()
+    let ruleCleaner = RuleCleaner()
     let chatGPT = ChatGPTAccount()
     @ObservationIgnored private(set) lazy var chatGPTCleaner = ChatGPTCleaner(account: chatGPT)
+    let claude = APIKeyAccount(provider: .anthropic)
+    let gemini = APIKeyAccount(provider: .google)
+    @ObservationIgnored private lazy var claudeCleaner = APIKeyCleaner(account: claude) { Preferences.shared.claudeModel }
+    @ObservationIgnored private lazy var geminiCleaner = APIKeyCleaner(account: gemini) { Preferences.shared.geminiModel }
 
     func cleaner(for engine: CleanUpEngine) -> any TextCleaner {
         switch engine {
         case .chatGPT: chatGPTCleaner
+        case .claude: claudeCleaner
+        case .gemini: geminiCleaner
         case .s1Mini: formatter
+        case .instant: ruleCleaner
+        }
+    }
+
+    /// The model that runs voice edits: the user's pick, else Clean Up's
+    /// model if it can edit, else whichever capable model is set up.
+    func voiceEditEngine(preferred: CleanUpEngine?, cleanUp: CleanUpEngine) -> CleanUpEngine? {
+        let candidates = [preferred, cleanUp].compactMap { $0 } + [.claude, .chatGPT, .gemini]
+        return candidates.first { $0.supportsVoiceEdits && isCleanUpReady($0) }
+    }
+
+    func voiceEditor(for engine: CleanUpEngine) -> (any VoiceEditor)? {
+        cleaner(for: engine) as? any VoiceEditor
+    }
+
+    /// The API key behind `engine`, for engines that use one.
+    func keyAccount(for engine: CleanUpEngine) -> APIKeyAccount? {
+        switch engine {
+        case .claude: claude
+        case .gemini: gemini
+        case .instant, .s1Mini, .chatGPT: nil
         }
     }
 
@@ -48,7 +76,10 @@ final class ModelManager {
     func isCleanUpReady(_ engine: CleanUpEngine) -> Bool {
         switch engine {
         case .chatGPT: chatGPT.isSignedIn
+        case .claude: claude.hasKey
+        case .gemini: gemini.hasKey
         case .s1Mini: formatterState.isInstalled
+        case .instant: true
         }
     }
 
@@ -83,6 +114,8 @@ final class ModelManager {
                 Task { await refreshAppleState() }
             case .parakeet:
                 speechStates[model] = ParakeetEngine.isInstalled(model) ? .installed : .notInstalled
+            case .phonon:
+                speechStates[model] = PhononEngine.isInstalled(model) ? .installed : .notInstalled
             case .whisper:
                 speechStates[model] = WhisperEngine.isInstalled(model) ? .installed : .notInstalled
             }
@@ -113,6 +146,7 @@ final class ModelManager {
         let engine: any SpeechEngine = switch model.family {
         case .apple: AppleSpeechEngine()
         case .parakeet: ParakeetEngine(model: model)
+        case .phonon: PhononEngine(model: model)
         case .whisper: WhisperEngine(model: model)
         }
         engines[model] = engine
@@ -201,6 +235,8 @@ final class ModelManager {
                     try await AppleSpeechEngine.installAssets(for: locale, progress: report)
                 case .parakeet:
                     try await ParakeetEngine.download(model, progress: report)
+                case .phonon:
+                    try await PhononEngine.download(model, progress: report)
                 case .whisper:
                     try await WhisperEngine.download(model, progress: report)
                 }
@@ -244,6 +280,8 @@ final class ModelManager {
             return
         case .parakeet:
             try? FileManager.default.removeItem(at: ParakeetEngine.directory(for: model))
+        case .phonon:
+            try? FileManager.default.removeItem(at: PhononEngine.directory(for: model))
         case .whisper:
             WhisperEngine.delete(model)
         }
@@ -299,6 +337,7 @@ final class ModelManager {
             switch model.family {
             case .apple: continue
             case .parakeet: locations[model.rawValue] = ParakeetEngine.directory(for: model)
+            case .phonon: locations[model.rawValue] = PhononEngine.directory(for: model)
             case .whisper: if let folder = WhisperEngine.folder(for: model) { locations[model.rawValue] = folder }
             }
         }

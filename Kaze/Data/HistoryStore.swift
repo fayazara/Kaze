@@ -15,6 +15,8 @@ struct HistoryItem: Codable, Identifiable, Hashable {
     var duration: TimeInterval
     /// Seconds from releasing the shortcut to the paste.
     var latency: TimeInterval
+    /// A voice edit: `rawText` is the spoken instruction, `text` the result.
+    var isVoiceEdit: Bool? = nil
 
     var wordCount: Int {
         text.split(whereSeparator: \.isWhitespace).count

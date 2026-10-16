@@ -187,6 +187,12 @@ struct IslandView: View {
                             .contentTransition(.numericText())
                     }
                 }
+                if dictation.mode == .edit {
+                    // Speaking an instruction, not text.
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
                 if handsFree {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 9, weight: .bold))

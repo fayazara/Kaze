@@ -5,6 +5,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
     case apple
     case parakeetV2
     case parakeetV3
+    case phonon2
     case whisperBase
     case whisperSmallEnglish
     case whisperLargeTurbo
@@ -12,12 +13,13 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 
     enum Family: String {
-        case apple, parakeet, whisper
+        case apple, parakeet, phonon, whisper
 
         var vendor: String {
             switch self {
             case .apple: "Apple"
             case .parakeet: "NVIDIA"
+            case .phonon: "Fermion Research"
             case .whisper: "OpenAI"
             }
         }
@@ -26,6 +28,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
             switch self {
             case .apple: "SpeechAnalyzer · Built into macOS"
             case .parakeet: "Core ML · Neural Engine"
+            case .phonon: "Core ML · Neural Engine"
             case .whisper: "Core ML · Neural Engine"
             }
         }
@@ -35,6 +38,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .apple: .apple
         case .parakeetV2, .parakeetV3: .parakeet
+        case .phonon2: .phonon
         case .whisperBase, .whisperSmallEnglish, .whisperLargeTurbo: .whisper
         }
     }
@@ -44,6 +48,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
         case .apple: "Apple Speech"
         case .parakeetV2: "Parakeet v2"
         case .parakeetV3: "Parakeet v3"
+        case .phonon2: "Phonon-2"
         case .whisperBase: "Whisper Base"
         case .whisperSmallEnglish: "Whisper Small"
         case .whisperLargeTurbo: "Whisper Large v3 Turbo"
@@ -55,6 +60,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
         case .apple: "Built into macOS. Shows your words live as you speak. Nothing to download."
         case .parakeetV2: "The fastest, most accurate model for English. Transcribes a minute of audio in under a second."
         case .parakeetV3: "Parakeet's multilingual build, covering 25 European languages."
+        case .phonon2: "A compact Parakeet for English, a third of the download with near-identical accuracy."
         case .whisperBase: "A small, quick Whisper model covering 99 languages."
         case .whisperSmallEnglish: "Whisper tuned for English. Good accuracy, modest size."
         case .whisperLargeTurbo: "Whisper's most accurate model for 99 languages."
@@ -64,7 +70,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
     var languages: String {
         switch self {
         case .apple: "~30 languages"
-        case .parakeetV2, .whisperSmallEnglish: "English"
+        case .parakeetV2, .phonon2, .whisperSmallEnglish: "English"
         case .parakeetV3: "25 languages"
         case .whisperBase, .whisperLargeTurbo: "99 languages"
         }
@@ -75,6 +81,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .apple: nil
         case .parakeetV2, .parakeetV3: "480 MB"
+        case .phonon2: "345 MB"
         case .whisperBase: "145 MB"
         case .whisperSmallEnglish: "220 MB"
         case .whisperLargeTurbo: "630 MB"
@@ -85,7 +92,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
     var speedRating: Int {
         switch self {
         case .apple: 4
-        case .parakeetV2, .parakeetV3: 5
+        case .parakeetV2, .parakeetV3, .phonon2: 5
         case .whisperBase: 4
         case .whisperSmallEnglish: 3
         case .whisperLargeTurbo: 2
@@ -97,6 +104,7 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
         case .apple: 4
         case .parakeetV2: 5
         case .parakeetV3: 4
+        case .phonon2: 5
         case .whisperBase: 2
         case .whisperSmallEnglish: 3
         case .whisperLargeTurbo: 4
@@ -120,10 +128,30 @@ nonisolated enum SpeechModel: String, CaseIterable, Identifiable, Codable {
 
     /// Whether the model is English-only (used to hide the language picker).
     var isEnglishOnly: Bool {
-        self == .parakeetV2 || self == .whisperSmallEnglish
+        self == .parakeetV2 || self == .phonon2 || self == .whisperSmallEnglish
     }
 
-    static let pickerOrder: [SpeechModel] = [.apple, .parakeetV2, .parakeetV3, .whisperSmallEnglish, .whisperBase, .whisperLargeTurbo]
+    static let pickerOrder: [SpeechModel] = [.apple, .parakeetV2, .parakeetV3, .phonon2, .whisperSmallEnglish, .whisperBase, .whisperLargeTurbo]
+}
+
+/// Phonon-2's Core ML package from `FermionResearch/Phonon-2-CoreML`.
+nonisolated enum PhononModel {
+    static let repo = "FermionResearch/Phonon-2-CoreML"
+    /// Pinned to a commit; the package must match the Swift runner's version.
+    static let revision = "1143812fd4236522232a8c33e3115f0577e3cd7d"
+    static let folder = "Phonon-2"
+    static let package = "Phonon-2.mlpackage"
+    /// The encoder windows in the package, in seconds.
+    static let encoderWindows: [Double] = [5, 10, 15, 35]
+    static let files = [
+        "manifest.json",
+        "decoder.bin",
+        "Phonon-2.mlpackage/Manifest.json",
+        "Phonon-2.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "Phonon-2.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "LICENSE-WEIGHTS-CC-BY-4.0.txt",
+        "NOTICE",
+    ]
 }
 
 /// The post-processing language model. Its name and capitalization are
@@ -157,6 +185,7 @@ nonisolated enum StorageLocations {
     }
 
     static var whisperModels: URL { root.appendingPathComponent("Whisper", isDirectory: true) }
+    static var phononModels: URL { root.appendingPathComponent("Phonon", isDirectory: true) }
     static var formatterModel: URL { root.appendingPathComponent("S1-mini", isDirectory: true) }
     static var history: URL { root.appendingPathComponent("history.json") }
     static var vocabulary: URL { root.appendingPathComponent("vocabulary.json") }

@@ -33,7 +33,9 @@ struct HistoryPane: View {
                         HistoryRow(item: item)
                             .contextMenu {
                                 Button("Copy") { copy(item.text) }
-                                if let raw = item.rawText { Button("Copy Original Transcript") { copy(raw) } }
+                                if let raw = item.rawText {
+                                    Button(item.isVoiceEdit == true ? "Copy Spoken Instruction" : "Copy Original Transcript") { copy(raw) }
+                                }
                                 Divider()
                                 Button("Delete", role: .destructive) { app.history.delete(item) }
                             }
@@ -119,9 +121,12 @@ private struct HistoryRow: View {
                     Text(item.date, format: .relative(presentation: .named))
                     if let app = item.appName { Text("· \(app)") }
                     Text("· \(item.model.title)")
-                    if item.rawText != nil {
+                    if item.isVoiceEdit == true, let instruction = item.rawText {
+                        Image(systemName: "pencil.line")
+                            .help("Voice edit: “\(instruction)”")
+                    } else if item.rawText != nil {
                         Image(systemName: "wand.and.sparkles")
-                            .help("Formatted by S1-mini")
+                            .help("Cleaned up")
                     }
                 }
                 .font(.caption)

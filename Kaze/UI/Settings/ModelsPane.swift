@@ -8,6 +8,7 @@ struct ModelsPane: View {
         [
             ("Built in", [.apple]),
             ("NVIDIA Parakeet", [.parakeetV2, .parakeetV3]),
+            ("Fermion Research Phonon", [.phonon2]),
             ("OpenAI Whisper", [.whisperSmallEnglish, .whisperBase, .whisperLargeTurbo]),
         ]
     }

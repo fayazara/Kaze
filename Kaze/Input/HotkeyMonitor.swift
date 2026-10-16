@@ -6,14 +6,22 @@ import os
 /// reports raw shortcut transitions. Interpreting them (hold vs. tap) is the
 /// dictation controller's job, so all session logic lives in one place.
 final class HotkeyMonitor {
+    /// Which shortcut an event belongs to.
+    enum Binding {
+        /// Dictate into the focused app.
+        case dictate
+        /// Speak an instruction that edits the selection (or writes new text).
+        case edit
+    }
+
     enum Event {
         /// The shortcut went down.
-        case pressed
+        case pressed(Binding)
         /// The shortcut came back up.
-        case released
+        case released(Binding)
         /// Another key was typed while a modifier-only shortcut was held,
         /// meaning the user was typing a chord such as fn+← rather than dictating.
-        case interrupted
+        case interrupted(Binding)
         /// Escape was pressed while `capturesEscape` is on.
         case escape
     }
@@ -21,7 +29,12 @@ final class HotkeyMonitor {
     var onEvent: ((Event) -> Void)?
 
     var shortcut: Shortcut = .default {
-        didSet { if oldValue != shortcut { isDown = false } }
+        didSet { if oldValue != shortcut { down.remove(.dictate) } }
+    }
+
+    /// The voice edit shortcut, or `nil` when voice edits are off.
+    var editShortcut: Shortcut? {
+        didSet { if oldValue != editShortcut { down.remove(.edit) } }
     }
 
     /// While a session is active, Escape cancels it instead of reaching the
@@ -34,7 +47,8 @@ final class HotkeyMonitor {
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var isDown = false
+    /// Bindings whose shortcut is currently held.
+    private var down = Set<Binding>()
     private let log = Logger(subsystem: "com.fayazahmed.Kaze", category: "Hotkey")
 
     @discardableResult
@@ -74,7 +88,7 @@ final class HotkeyMonitor {
         tap = nil
         runLoopSource = nil
         isRunning = false
-        isDown = false
+        down = []
     }
 
     /// Returns `true` to swallow the event.
@@ -84,7 +98,7 @@ final class HotkeyMonitor {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             log.notice("Event tap was disabled by the system; re-enabling")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            isDown = false
+            down = []
             return false
         }
 
@@ -95,55 +109,60 @@ final class HotkeyMonitor {
             return canFilterEvents
         }
 
-        switch shortcut {
-        case .modifiers(let keys):
-            return handleModifierShortcut(keys, type: type, event: event)
-        case .key(let code, let modifiers):
-            return handleKeyShortcut(code: code, modifiers: modifiers, type: type, event: event, keyCode: keyCode)
+        var swallow = false
+        for (binding, shortcut) in [(Binding.dictate, Optional(shortcut)), (.edit, editShortcut)] {
+            guard let shortcut else { continue }
+            switch shortcut {
+            case .modifiers(let keys):
+                swallow = handleModifierShortcut(keys, binding: binding, type: type, event: event) || swallow
+            case .key(let code, let modifiers):
+                swallow = handleKeyShortcut(code: code, modifiers: modifiers, binding: binding, type: type, event: event, keyCode: keyCode) || swallow
+            }
         }
+        return swallow
     }
 
-    private func handleModifierShortcut(_ keys: Set<ModifierKey>, type: CGEventType, event: CGEvent) -> Bool {
+    private func handleModifierShortcut(_ keys: Set<ModifierKey>, binding: Binding, type: CGEventType, event: CGEvent) -> Bool {
         switch type {
         case .flagsChanged:
             let held = ModifierKey.held(in: event.flags)
-            if !isDown, held == keys {
-                isDown = true
-                onEvent?(.pressed)
-            } else if isDown, !keys.isSubset(of: held) {
-                isDown = false
-                onEvent?(.released)
+            if !down.contains(binding), held == keys {
+                down.insert(binding)
+                onEvent?(.pressed(binding))
+            } else if down.contains(binding), !keys.isSubset(of: held) {
+                down.remove(binding)
+                onEvent?(.released(binding))
             }
         case .keyDown:
-            if isDown { onEvent?(.interrupted) }
+            if down.contains(binding) { onEvent?(.interrupted(binding)) }
         default:
             break
         }
         return false
     }
 
-    private func handleKeyShortcut(code: Int, modifiers: Set<GenericModifier>, type: CGEventType, event: CGEvent, keyCode: Int) -> Bool {
+    private func handleKeyShortcut(code: Int, modifiers: Set<GenericModifier>, binding: Binding, type: CGEventType, event: CGEvent, keyCode: Int) -> Bool {
         switch type {
         case .keyDown where keyCode == code:
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
-                return isDown && canFilterEvents
+                return down.contains(binding) && canFilterEvents
             }
             guard Self.modifiersMatch(modifiers, event.flags) else { return false }
-            if !isDown {
-                isDown = true
-                onEvent?(.pressed)
+            if !down.contains(binding) {
+                down.insert(binding)
+                onEvent?(.pressed(binding))
             }
             return canFilterEvents
         case .keyUp where keyCode == code:
-            guard isDown else { return false }
-            isDown = false
-            onEvent?(.released)
+            guard down.contains(binding) else { return false }
+            down.remove(binding)
+            onEvent?(.released(binding))
             return canFilterEvents
         case .flagsChanged:
             // Letting go of the modifiers before the key still ends the hold.
-            if isDown, !modifiers.isSubset(of: GenericModifier.set(from: event.flags)) {
-                isDown = false
-                onEvent?(.released)
+            if down.contains(binding), !modifiers.isSubset(of: GenericModifier.set(from: event.flags)) {
+                down.remove(binding)
+                onEvent?(.released(binding))
             }
             return false
         default:

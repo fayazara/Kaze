@@ -92,6 +92,11 @@ final class Preferences {
         static let cleanUpEngine = "v1.cleanUpEngine"
         static let chatGPTModel = "v1.chatGPTModel"
         static let chatGPTReasoning = "v1.chatGPTReasoning"
+        static let claudeModel = "v1.claudeModel"
+        static let geminiModel = "v1.geminiModel"
+        static let appStyles = "v1.appStyles"
+        static let editShortcut = "v1.editShortcut"
+        static let editEngine = "v1.editEngine"
         static let formatStyle = "v1.formatStyle"
         static let allowLists = "v1.allowLists"
         static let emailInMailApps = "v1.emailInMailApps"
@@ -120,7 +125,17 @@ final class Preferences {
     var chatGPTModel: String? { didSet { defaults.set(chatGPTModel, forKey: Key.chatGPTModel) } }
     /// Reasoning effort for ChatGPT Clean Up, or `nil` for the model's lightest.
     var chatGPTReasoning: String? { didSet { defaults.set(chatGPTReasoning, forKey: Key.chatGPTReasoning) } }
+    /// Claude model ID for Clean Up, or `nil` for the lightest.
+    var claudeModel: String? { didSet { defaults.set(claudeModel, forKey: Key.claudeModel) } }
+    /// Gemini model ID for Clean Up, or `nil` for the lightest.
+    var geminiModel: String? { didSet { defaults.set(geminiModel, forKey: Key.geminiModel) } }
     var formatStyle: FormatStyle { didSet { defaults.set(formatStyle.rawValue, forKey: Key.formatStyle) } }
+    /// Styles that override `formatStyle` in specific apps.
+    var appStyles: [AppStyleRule] { didSet { defaults.set(try? JSONEncoder().encode(appStyles), forKey: Key.appStyles) } }
+    /// The voice edit shortcut, or `nil` when voice edits are off.
+    var editShortcut: Shortcut? { didSet { defaults.set(editShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: Key.editShortcut) } }
+    /// Cloud model for voice edits, or `nil` to pick one automatically.
+    var editEngine: CleanUpEngine? { didSet { defaults.set(editEngine?.rawValue, forKey: Key.editEngine) } }
     var allowLists: Bool { didSet { defaults.set(allowLists, forKey: Key.allowLists) } }
     var emailInMailApps: Bool { didSet { defaults.set(emailInMailApps, forKey: Key.emailInMailApps) } }
     var restoreClipboard: Bool { didSet { defaults.set(restoreClipboard, forKey: Key.restoreClipboard) } }
@@ -151,11 +166,16 @@ final class Preferences {
         escapeToCancel = defaults.bool(forKey: Key.escapeToCancel)
         microphoneID = defaults.string(forKey: Key.microphoneID)
         formattingEnabled = defaults.bool(forKey: Key.formattingEnabled)
-        // On-device by default; ChatGPT only when the user opts in.
+        // On-device by default; cloud models only when the user opts in.
         cleanUpEngine = CleanUpEngine(rawValue: defaults.string(forKey: Key.cleanUpEngine) ?? "") ?? .s1Mini
         chatGPTModel = defaults.string(forKey: Key.chatGPTModel)
         chatGPTReasoning = defaults.string(forKey: Key.chatGPTReasoning)
+        claudeModel = defaults.string(forKey: Key.claudeModel)
+        geminiModel = defaults.string(forKey: Key.geminiModel)
         formatStyle = FormatStyle(rawValue: defaults.string(forKey: Key.formatStyle) ?? "") ?? .semiFormal
+        appStyles = defaults.data(forKey: Key.appStyles).flatMap { try? JSONDecoder().decode([AppStyleRule].self, from: $0) } ?? []
+        editShortcut = defaults.data(forKey: Key.editShortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) }
+        editEngine = defaults.string(forKey: Key.editEngine).flatMap(CleanUpEngine.init(rawValue:))
         allowLists = defaults.bool(forKey: Key.allowLists)
         emailInMailApps = defaults.bool(forKey: Key.emailInMailApps)
         restoreClipboard = defaults.bool(forKey: Key.restoreClipboard)

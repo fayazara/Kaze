@@ -158,6 +158,12 @@ enum Shortcut: Codable, Equatable, Hashable {
         .key(code: kVK_Space, modifiers: [.option]),
     ]
 
+    /// A starting voice edit shortcut that differs from `dictation`.
+    static func suggestedEdit(avoiding dictation: Shortcut) -> Shortcut {
+        [.modifiers([.rightOption]), .modifiers([.rightCommand]), .key(code: kVK_Space, modifiers: [.option, .shift])]
+            .first { $0 != dictation }!
+    }
+
     var isValid: Bool {
         switch self {
         case .modifiers(let keys): !keys.isEmpty

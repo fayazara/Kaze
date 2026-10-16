@@ -65,7 +65,7 @@ final class TextInserter {
 
     private static func postCommandV() {
         let source = CGEventSource(stateID: .combinedSessionState)
-        let keyCode = CGKeyCode(vKeyCode)
+        let keyCode = CGKeyCode(keyCode(for: "v", fallback: kVK_ANSI_V))
         let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
         down?.flags = .maskCommand
@@ -74,27 +74,27 @@ final class TextInserter {
         up?.post(tap: .cgAnnotatedSessionEventTap)
     }
 
-    /// The key that types "v" in the current layout, so ⌘V works on Dvorak,
-    /// AZERTY and friends. Falls back to the ANSI position.
-    private static var vKeyCode: Int {
+    /// The key that types `character` in the current layout, so ⌘V and ⌘C
+    /// work on Dvorak, AZERTY and friends. Falls back to the ANSI position.
+    static func keyCode(for character: Unicode.Scalar, fallback: Int) -> Int {
         guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let layoutPointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
-            return kVK_ANSI_V
+            return fallback
         }
         let layoutData = Unmanaged<CFData>.fromOpaque(layoutPointer).takeUnretainedValue() as Data
         return layoutData.withUnsafeBytes { buffer -> Int in
-            guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return kVK_ANSI_V }
+            guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return fallback }
             for code in 0..<128 {
                 var deadKeyState: UInt32 = 0
                 var length = 0
                 var chars = [UniChar](repeating: 0, count: 4)
                 let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()),
                                             OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeyState, chars.count, &length, &chars)
-                if status == noErr, length == 1, chars[0] == UniChar(("v" as Unicode.Scalar).value) {
+                if status == noErr, length == 1, chars[0] == UniChar(character.value) {
                     return code
                 }
             }
-            return kVK_ANSI_V
+            return fallback
         }
     }
 }

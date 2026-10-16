@@ -11,6 +11,7 @@
 		31MLXCMN022F4D76D200E96913 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXCMN012F4D76D200E96913 /* MLXLMCommon */; };
 		31MLXLLM022F4D76D200E96913 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXLLM012F4D76D200E96913 /* MLXLLM */; };
 		31MLXSW022F4D76D200E96913 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 31MLXSW012F4D76D200E96913 /* MLX */; };
+		31PHONON022F4D76D200E96913 /* PhononCoreML in Frameworks */ = {isa = PBXBuildFile; productRef = 31PHONON012F4D76D200E96913 /* PhononCoreML */; };
 		31SPARKLE022F4D76D200E96913 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31SPARKLE012F4D76D200E96913 /* Sparkle */; };
 		31TOKEN022F4D76D200E96913 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 31TOKEN012F4D76D200E96913 /* Tokenizers */; };
 		31WHISPER022F4D76D200E96913 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31WHISPER012F4D76D200E96913 /* WhisperKit */; };
@@ -48,6 +49,7 @@
 				31MLXCMN022F4D76D200E96913 /* MLXLMCommon in Frameworks */,
 				31TOKEN022F4D76D200E96913 /* Tokenizers in Frameworks */,
 				31MLXSW022F4D76D200E96913 /* MLX in Frameworks */,
+				31PHONON022F4D76D200E96913 /* PhononCoreML in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,6 +119,7 @@
 				31MLXCMN012F4D76D200E96913 /* MLXLMCommon */,
 				31TOKEN012F4D76D200E96913 /* Tokenizers */,
 				31MLXSW012F4D76D200E96913 /* MLX */,
+				31PHONON012F4D76D200E96913 /* PhononCoreML */,
 			);
 			productName = Kaze;
 			productReference = 31F19CCD2F4D76D200E96913 /* Kaze Dev.app */;
@@ -156,6 +159,7 @@
 				31MLXLM0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 				31TOKEN0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 				31MLXSW0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				31PHONON002F4D76D200E96913 /* XCRemoteSwiftPackageReference "phonon-coreml" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31F19CCE2F4D76D200E96913 /* Products */;
@@ -517,6 +521,14 @@
 				minimumVersion = 0.32.3;
 			};
 		};
+		31PHONON002F4D76D200E96913 /* XCRemoteSwiftPackageReference "phonon-coreml" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/fermionresearch/phonon-coreml";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.2;
+			};
+		};
 		31SPARKLE002F4D76D200E96913 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
@@ -563,6 +575,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 31MLXSW0002F4D76D200E96913 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;
+		};
+		31PHONON012F4D76D200E96913 /* PhononCoreML */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31PHONON002F4D76D200E96913 /* XCRemoteSwiftPackageReference "phonon-coreml" */;
+			productName = PhononCoreML;
 		};
 		31SPARKLE012F4D76D200E96913 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

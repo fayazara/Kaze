@@ -48,6 +48,18 @@ final class AppModel {
 
     func setShortcut(_ shortcut: Shortcut) {
         preferences.shortcut = shortcut
+        // One key can't do both; the dictation shortcut wins.
+        if preferences.editShortcut == shortcut { preferences.editShortcut = nil }
+        dictation.shortcutDidChange()
+    }
+
+    /// Sets the voice edit shortcut, or turns voice edits off with `nil`.
+    func setEditShortcut(_ shortcut: Shortcut?) {
+        guard shortcut != preferences.shortcut else {
+            NSSound.beep()
+            return
+        }
+        preferences.editShortcut = shortcut
         dictation.shortcutDidChange()
     }
 

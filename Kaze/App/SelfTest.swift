@@ -9,6 +9,7 @@ import os
 ///     "Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --model parakeetV2 --say "send it by friday"
 ///     "Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --model apple --audio clip.wav   (path inside the container)
 ///     "Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --format "so um send it friday no thursday"
+///     "Kaze Dev.app/Contents/MacOS/Kaze Dev" --selftest --edit "make this friendlier" --selection "Send the report." --engine claude
 ///
 /// Downloads the model if needed, runs it, prints results and timings, exits.
 enum SelfTest {
@@ -21,6 +22,27 @@ enum SelfTest {
             return args[index + 1]
         }
         let models = AppModel.shared.models
+
+        if let instruction = value("--edit") {
+            let prefs = Preferences.shared
+            let preferred = value("--engine").flatMap(CleanUpEngine.init(rawValue:))
+            guard let engine = models.voiceEditEngine(preferred: preferred, cleanUp: prefs.cleanUpEngine),
+                  let editor = models.voiceEditor(for: engine) else {
+                print("SELFTEST FAILED: no cloud model is set up for voice edits")
+                return 1
+            }
+            print("engine: \(engine.title)")
+            let started = Date()
+            do {
+                try await editor.prepare()
+                let output = try await editor.edit(selection: value("--selection"), instruction: instruction, appName: value("--app"))
+                print("[\(String(format: "%.2f", Date().timeIntervalSince(started)))s] → \(output)")
+                return 0
+            } catch {
+                print("SELFTEST FAILED: \(error.localizedDescription)")
+                return 1
+            }
+        }
 
         if args.contains("--focus") {
             let ax = FocusedApp.accessibilityFocused()
@@ -88,15 +110,24 @@ enum SelfTest {
                 if engine == .chatGPT {
                     print("chatgpt: \(models.chatGPT.status) \(models.chatGPT.email ?? "")")
                 }
-                // Debug-only overrides for comparing ChatGPT settings; the
+                if let account = models.keyAccount(for: engine) {
+                    print("\(engine.rawValue): key \(account.hasKey ? "saved" : "missing")")
+                }
+                // Debug-only overrides for comparing cloud model settings; the
                 // previous values are restored below.
                 let savedModel = Preferences.shared.chatGPTModel
                 let savedEffort = Preferences.shared.chatGPTReasoning
+                let savedClaude = Preferences.shared.claudeModel
+                let savedGemini = Preferences.shared.geminiModel
                 if let slug = value("--chatgpt-model") { Preferences.shared.chatGPTModel = slug }
+                if let id = value("--claude-model") { Preferences.shared.claudeModel = id }
+                if let id = value("--gemini-model") { Preferences.shared.geminiModel = id }
                 if let effort = value("--effort") { Preferences.shared.chatGPTReasoning = effort == "lowest" ? nil : effort }
                 defer {
                     Preferences.shared.chatGPTModel = savedModel
                     Preferences.shared.chatGPTReasoning = savedEffort
+                    Preferences.shared.claudeModel = savedClaude
+                    Preferences.shared.geminiModel = savedGemini
                 }
                 let cleaner = models.cleaner(for: engine)
                 var started = Date()
@@ -107,7 +138,8 @@ enum SelfTest {
                     for style in [FormatStyle.semiFormal] {
                         started = Date()
                         do {
-                            let output = try await cleaner.format(input, style: style, allowLists: true, context: .general)
+                            let context = value("--context").flatMap(FormatContext.init(rawValue:)) ?? .general
+                            let output = try await cleaner.format(input, style: style, allowLists: context != .code, context: context)
                             let verdict = TextPolisher.isPlausibleRewrite(output, of: input) ? "" : "   [REJECTED by guard → raw transcript pasted]"
                             print("[\(String(format: "%.2f", Date().timeIntervalSince(started)))s] \(input)\n   → \(output)\(verdict)")
                         } catch {
@@ -147,6 +179,9 @@ enum SelfTest {
         case .parakeet where !ParakeetEngine.isInstalled(model):
             print("downloading \(model.title)…")
             try await ParakeetEngine.download(model) { _ in }
+        case .phonon where !PhononEngine.isInstalled(model):
+            print("downloading \(model.title)…")
+            try await PhononEngine.download(model) { _ in }
         case .whisper where !WhisperEngine.isInstalled(model):
             print("downloading \(model.title)…")
             try await WhisperEngine.download(model) { _ in }

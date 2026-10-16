@@ -33,7 +33,9 @@ nonisolated enum FileDownloader {
             let file = try await downloadOne(item.url) { written in
                 progress(Double(base + written) / Double(total))
             }
-            try fm.moveItem(at: file, to: staging.appendingPathComponent(item.fileName))
+            let target = staging.appendingPathComponent(item.fileName)
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.moveItem(at: file, to: target)
             completed += sizes[index]
             progress(Double(completed) / Double(total))
         }

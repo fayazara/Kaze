@@ -52,6 +52,7 @@ enum Theme {
         switch family {
         case .apple: Image(systemName: "apple.logo")
         case .parakeet: Image("nvidia-icon")
+        case .phonon: Image("fermion-icon")
         case .whisper: Image("openai-icon")
         }
     }
@@ -300,6 +301,7 @@ struct ModelGlyph: View {
         switch family {
         case .apple: 0.44
         case .parakeet: 0.66
+        case .phonon: 0.5
         case .whisper: 0.52
         }
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, shortcut, models, formatting, vocabulary, history, about
+    case general, shortcut, models, formatting, voiceEdits, vocabulary, history, about
 
     var id: String { rawValue }
 
@@ -11,6 +11,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .shortcut: "Shortcut"
         case .models: "Speech Models"
         case .formatting: "Clean Up"
+        case .voiceEdits: "Voice Edits"
         case .vocabulary: "Vocabulary"
         case .history: "History"
         case .about: "About"
@@ -23,6 +24,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .shortcut: "keyboard.fill"
         case .models: "waveform"
         case .formatting: "wand.and.sparkles"
+        case .voiceEdits: "pencil.line"
         case .vocabulary: "character.book.closed.fill"
         case .history: "clock.fill"
         case .about: "info.circle.fill"
@@ -35,6 +37,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .shortcut: .blue
         case .models: .purple
         case .formatting: .pink
+        case .voiceEdits: .teal
         case .vocabulary: .orange
         case .history: .green
         case .about: .secondary
@@ -63,6 +66,7 @@ struct SettingsView: View {
         } detail: {
             detail
                 .navigationTitle(navigation.selection.title)
+                .environment(navigation)
         }
         .onAppear { app.permissions.beginWatching() }
         .onDisappear { app.permissions.endWatching() }
@@ -87,6 +91,7 @@ struct SettingsView: View {
         case .shortcut: ShortcutPane()
         case .models: ModelsPane()
         case .formatting: FormattingPane()
+        case .voiceEdits: VoiceEditsPane()
         case .vocabulary: VocabularyPane()
         case .history: HistoryPane()
         case .about: AboutPane()

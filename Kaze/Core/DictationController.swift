@@ -48,6 +48,8 @@ final class DictationController {
     private(set) var targetApp: NSRunningApplication?
     /// The speech model was still loading when recording ended.
     private(set) var isWaitingForModel = false
+    /// Whether this session dictates text or speaks a voice edit.
+    private(set) var mode: HotkeyMonitor.Binding = .dictate
 
     static let levelCount = 28
 
@@ -87,6 +89,7 @@ final class DictationController {
         self.vocabulary = vocabulary
         self.history = history
         hotkey.shortcut = preferences.shortcut
+        hotkey.editShortcut = preferences.editShortcut
         hotkey.onEvent = { [weak self] event in self?.handle(event) }
     }
 
@@ -95,37 +98,39 @@ final class DictationController {
     @discardableResult
     func startMonitoring() -> Bool {
         hotkey.shortcut = preferences.shortcut
+        hotkey.editShortcut = preferences.editShortcut
         return hotkey.start()
     }
 
     func shortcutDidChange() {
         hotkey.shortcut = preferences.shortcut
+        hotkey.editShortcut = preferences.editShortcut
     }
 
     private func handle(_ event: HotkeyMonitor.Event) {
         guard !isPaused else { return }
         let now = Date()
         switch event {
-        case .pressed:
+        case .pressed(let binding):
             switch phase {
             case .idle, .done, .failed, .nothingHeard:
                 pressedAt = now
-                start(handsFree: preferences.activationMode == .toggle)
-            case .listening(handsFree: true):
+                start(handsFree: preferences.activationMode == .toggle, mode: binding)
+            case .listening(handsFree: true) where binding == mode:
                 stop()
             default:
                 break
             }
-        case .released:
-            guard case .listening(handsFree: false) = phase else { return }
+        case .released(let binding):
+            guard binding == mode, case .listening(handsFree: false) = phase else { return }
             let heldFor = now.timeIntervalSince(pressedAt ?? now)
             if preferences.activationMode == .automatic, heldFor < Self.tapThreshold {
                 phase = .listening(handsFree: true)
             } else {
                 stop()
             }
-        case .interrupted:
-            if phase.isListening, let since = listeningSince, now.timeIntervalSince(since) < Self.chordWindow {
+        case .interrupted(let binding):
+            if binding == mode, phase.isListening, let since = listeningSince, now.timeIntervalSince(since) < Self.chordWindow {
                 log.debug("Shortcut was part of a key chord; discarding")
                 cancel(silently: true)
             }
@@ -145,7 +150,7 @@ final class DictationController {
 
     // MARK: - Session lifecycle
 
-    func start(handsFree: Bool) {
+    func start(handsFree: Bool, mode: HotkeyMonitor.Binding = .dictate) {
         resetTask?.cancel()
         generation += 1
         let generation = generation
@@ -164,6 +169,10 @@ final class DictationController {
             fail("\(model.title) isn't downloaded yet")
             return
         }
+        if mode == .edit, voiceEditEngine == nil {
+            fail("Voice edits need a model. Set one up in Voice Edits.")
+            return
+        }
 
         let session: any TranscriptionSession
         do {
@@ -180,6 +189,7 @@ final class DictationController {
         }
 
         self.session = session
+        self.mode = mode
         sessionModel = model
         targetApp = NSWorkspace.shared.frontmostApplication
         liveText = ""
@@ -193,7 +203,10 @@ final class DictationController {
         // Load the models while the user speaks (~0.1 s once macOS has
         // cached the Neural Engine build), and keep them until we're done.
         models.beginUse(model)
-        if shouldFormat {
+        if mode == .edit, let engine = voiceEditEngine {
+            let editor = models.cleaner(for: engine)
+            Task { try? await editor.prepare() }
+        } else if shouldFormat {
             let cleaner = models.cleaner(for: preferences.cleanUpEngine)
             Task { try? await cleaner.prepare() }
         }
@@ -255,7 +268,11 @@ final class DictationController {
                     try await session.finish(audio: audio)
                 }
                 guard self.generation == generation else { return }
-                try await deliver(raw: TextPolisher.clean(raw), model: model, duration: duration, stoppedAt: stoppedAt, generation: generation)
+                if mode == .edit {
+                    await deliverEdit(instruction: TextPolisher.clean(raw), model: model, duration: duration, stoppedAt: stoppedAt, generation: generation)
+                } else {
+                    try await deliver(raw: TextPolisher.clean(raw), model: model, duration: duration, stoppedAt: stoppedAt, generation: generation)
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -291,10 +308,17 @@ final class DictationController {
         var text = raw
         if shouldFormat {
             phase = .formatting
-            let context: FormatContext = preferences.emailInMailApps && Self.isMailApp(targetApp) ? .email : .general
+            let rule = preferences.appStyles.first { $0.bundleID == targetApp?.bundleIdentifier }
+            let context: FormatContext = if rule?.style == .code {
+                .code
+            } else if preferences.emailInMailApps, Self.isMailApp(targetApp) {
+                .email
+            } else {
+                .general
+            }
             let formatter = models.cleaner(for: preferences.cleanUpEngine)
-            let style = preferences.formatStyle
-            let allowLists = preferences.allowLists
+            let style = rule?.style.formatStyle ?? preferences.formatStyle
+            let allowLists = preferences.allowLists && context != .code
             do {
                 let formatted = try await withTimeout(seconds: 20) {
                     try await formatter.format(raw, style: style, allowLists: allowLists, context: context)
@@ -343,15 +367,75 @@ final class DictationController {
         finish(.done(pasted: outcome == .pasted), after: outcome == .pasted ? 0.9 : 2.5)
     }
 
+    /// Applies a spoken instruction to the selection in the focused app, or
+    /// writes new text at the cursor when nothing is selected.
+    private func deliverEdit(instruction: String, model: SpeechModel, duration: TimeInterval, stoppedAt: Date, generation: Int) async {
+        guard !instruction.isEmpty else {
+            nothingHeard()
+            return
+        }
+        guard let engine = voiceEditEngine, let editor = models.voiceEditor(for: engine) else {
+            fail("Voice edits need a model. Set one up in Voice Edits.")
+            return
+        }
+        phase = .formatting
+        let selection = await SelectionReader.read()
+        guard self.generation == generation else { return }
+        let appName = targetApp?.localizedName
+
+        let result: String
+        do {
+            result = try await withTimeout(seconds: 30) {
+                try await editor.edit(selection: selection, instruction: instruction, appName: appName)
+            }
+        } catch {
+            guard self.generation == generation else { return }
+            log.error("Voice edit failed: \(error.localizedDescription, privacy: .public)")
+            fail(error is TimeoutError ? "The edit took too long" : error.localizedDescription)
+            return
+        }
+        guard self.generation == generation else { return }
+        guard !result.isEmpty else {
+            fail("The model returned nothing")
+            return
+        }
+
+        // A replaced selection keeps its surroundings; new text gets the usual spacing.
+        var output = result
+        if selection == nil, preferences.addTrailingSpace, !output.hasSuffix("\n") { output += " " }
+        let outcome = await inserter.insert(output, restoreClipboard: preferences.restoreClipboard)
+        guard self.generation == generation else { return }
+
+        if preferences.saveHistory {
+            history.add(HistoryItem(
+                date: Date(),
+                text: result,
+                rawText: instruction,
+                model: model,
+                appName: targetApp?.localizedName,
+                appBundleID: targetApp?.bundleIdentifier,
+                duration: duration,
+                latency: Date().timeIntervalSince(stoppedAt),
+                isVoiceEdit: true
+            ))
+        }
+        log.info("Voice edit (\(selection == nil ? "insert" : "replace", privacy: .public)) delivered in \(Date().timeIntervalSince(stoppedAt), format: .fixed(precision: 2))s after release")
+        finish(.done(pasted: outcome == .pasted), after: outcome == .pasted ? 0.9 : 2.5)
+    }
+
+    private var voiceEditEngine: CleanUpEngine? {
+        models.voiceEditEngine(preferred: preferences.editEngine, cleanUp: preferences.cleanUpEngine)
+    }
+
     private var shouldFormat: Bool {
         let engine = preferences.cleanUpEngine
         guard preferences.formattingEnabled, models.isCleanUpReady(engine) else { return false }
         let language = sessionModel.isEnglishOnly ? "en" : preferences.language
         switch engine {
-        case .s1Mini:
-            // S1-mini v1 is English-only.
+        case .s1Mini, .instant:
+            // S1-mini v1 and the rules are English-only.
             return (language ?? Locale.current.language.languageCode?.identifier ?? "en").hasPrefix("en")
-        case .chatGPT:
+        case .chatGPT, .claude, .gemini:
             return true
         }
     }

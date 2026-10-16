@@ -9,6 +9,11 @@ import os
 enum FormatContext: String {
     case general
     case email
+    /// A code editor or terminal. S1-mini has no such context.
+    case code
+
+    /// The value S1-mini was trained on.
+    var s1Value: String { self == .code ? FormatContext.general.rawValue : rawValue }
 }
 
 /// Rewrites raw transcripts into clean written text with "S1-mini" by
@@ -90,7 +95,7 @@ final class S1MiniFormatter {
     /// boundaries, since the model is tuned for dictation-length input.
     func format(_ transcript: String, style: FormatStyle, allowLists: Bool, context: FormatContext) async throws -> String {
         let container = try await loadedContainer()
-        let control = "[Styling: \(style.rawValue)] [Structure: \(allowLists ? "lists" : "prose")] [Context: \(context.rawValue)]"
+        let control = "[Styling: \(style.rawValue)] [Structure: \(allowLists ? "lists" : "prose")] [Context: \(context.s1Value)]"
         var outputs: [String] = []
         for chunk in Self.chunks(of: transcript) {
             outputs.append(try await run(chunk, control: control, container: container))
