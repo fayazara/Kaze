@@ -1,22 +1,18 @@
 {
   "fill" : {
-    "linear-gradient" : [
-      "extended-gray:0.25000,1.00000",
-      "extended-gray:0.00000,1.00000"
-    ]
+    "solid" : "extended-gray:0.00000,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
-          "glass" : false,
-          "image-name" : "Image 2.png",
-          "name" : "Image 2",
+          "image-name" : "SolarMicrophoneLargeBold (1).png",
+          "name" : "SolarMicrophoneLargeBold (1)",
           "position" : {
-            "scale" : 0.7,
+            "scale" : 1.5,
             "translation-in-points" : [
-              -4,
-              149
+              0,
+              0
             ]
           }
         }
