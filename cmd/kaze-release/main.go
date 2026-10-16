@@ -736,6 +736,9 @@ func runBuildPhase(repoDir, homeDir, appPath string) {
 		"-destination", "generic/platform=macOS",
 		"-archivePath", archivePath,
 		"DEVELOPMENT_TEAM="+developmentTeam,
+		// Apple silicon only; on the command line so Swift package targets
+		// (PhononCoreML uses Float16, which Intel lacks) build arm64 too.
+		"ARCHS=arm64",
 	); err != nil {
 		fail("xcodebuild archive failed:\n" + lastLines(out, 40))
 	}
