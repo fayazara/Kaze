@@ -27,6 +27,33 @@
     -->
 
     <item>
+      <title>Version 1.2.0</title>
+      <sparkle:version>18</sparkle:version>
+      <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <pubDate>Fri, 16 Oct 2026 16:42:05 +0000</pubDate>
+      <description><![CDATA[
+        <h2>What's New in 1.2.0</h2>
+        <ul>
+          <li>New speech model, Phonon-2 by Fermion Research: a compact Parakeet for English that's about a third smaller to download (345 MB) with near-identical accuracy and the same speed. Runs on the Neural Engine, entirely on your Mac. Pick it in Settings → Models.</li>
+          <li>Voice edits: select some text, hold the voice edit shortcut and say what to change ("make this friendlier", "turn this into bullet points", "translate to Spanish"). Kaze rewrites the selection in place. With nothing selected, it writes new text at your cursor. Turn it on in Settings → Voice Edits. Needs a cloud Clean Up model.</li>
+          <li>Instant Clean Up: a new mode that tidies your dictation by rule, with no AI model. It removes fillers and stutters, handles "scratch that" and "no wait, make that…", writes numbers and amounts as digits, and lays out lists and emails. Nothing to download, instant, and it stays on your Mac. English only.</li>
+          <li>Clean Up with Claude or Gemini: use your own Anthropic or Google AI Studio API key, alongside ChatGPT and S1-mini. Your key is stored in the Keychain, and you can pick the model in Settings.</li>
+          <li>Styles per app: set a different writing style for each app, such as casual for Discord, formal for Mail, and a new Code style for editors and terminals that only removes what you didn't mean to say. Kaze suggests styles for the apps you have installed.</li>
+          <li>Try Clean Up before you dictate: type a sentence the way you'd say it on the Clean Up page and see how the selected model rewrites it, with timing.</li>
+          <li>Voice edits are marked in History. Hover the pencil to see what you said, or copy the spoken instruction from the context menu.</li>
+          <li>Fixed a layout jump in the Clean Up demo during onboarding.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/fayazara/Kaze/releases/download/v1.2.0/Kaze.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="QAqCc9/5pjVCzMJjZZSKOqyys9Zih3X2jYnEMNKkAbC046KmBUHjHd0Bm5iGf5LI/HR2u5JM+Z85u5pvB60MDw=="
+        length="19096825"
+      />
+    </item>
+
+    <item>
       <title>Version 1.1.2</title>
       <sparkle:version>17</sparkle:version>
       <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
