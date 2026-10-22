@@ -23,7 +23,11 @@ final class AppModel {
         }
         dictation = DictationController(preferences: preferences, models: models, vocabulary: vocabulary, history: history)
         permissions.onAccessibilityGranted = { [weak self] in
-            self?.startShortcutMonitoring()
+            guard let self else { return }
+            // A tap created before the grant only sees Kaze's own events, so
+            // the shortcut works only while Kaze is frontmost. Rebuild it.
+            dictation.hotkey.stop()
+            startShortcutMonitoring()
         }
     }
 
